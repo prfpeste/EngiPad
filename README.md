@@ -1,6 +1,6 @@
 # EngiPad
 
-EngiPad is a browser-based calculation notebook for engineers using Python, SymPy, and Matplotlib
+EngiPad is a browser-based calculation notebook for engineers using Python, SymPy, and Matplotlib.
 
 It lets you:
 
@@ -54,6 +54,7 @@ The interface consists of a text editor on the left and a LaTeX/plot output area
 - Text lines in double quotes (`"..."`) are rendered as bold LaTeX text; single quotes (`'...'`) render as plain (non-bold) text
 - Lines starting with `#` are comments and are ignored
 - Greek variables are automatically rendered as LaTeX symbols
+- Accent notation (`Q__dot`, `Q__bar`, `Q__hat`, `Q__tilde`) puts a dot, bar, hat, or tilde over a variable's base symbol (e.g. for a time derivative `Q̇`), and works as a normal, reusable variable
 - Toolbar buttons: open file, save file, insert Greek letters/symbols, insert function snippets, insert equation/calculus snippets, insert matrix/vector snippets, insert a plot snippet, settings (rounding precision, font size), calculate, print, LaTeX export, info
 - Print stylesheet that hides the editor and prints only the formatted output
 - A configurable computation timeout (10s by default) protects the server against accidentally or intentionally very expensive input
@@ -303,6 +304,30 @@ Greek letters can be used directly in variable names, for example:
 μ = 0.12
 ```
 
+### Accent notation
+
+Append `__dot`, `__bar`, `__hat`, or `__tilde` (double underscore) directly
+after a variable's base symbol to put an accent over it — useful for
+things like a time derivative (`Q̇`), an average value (`Q̄`), an
+estimated value (`Q̂`), or an approximate value (`Q̃`):
+
+```text
+Q__dot = 5'W        ; renders as Q̇ = 5 W, and works as a normal variable
+P = Q__dot * 2       ; Q̇ can be reused in later formulas, e.g. P = Q̇ · 2 = 10 W
+
+Q__bar = 3           ; Q̄
+a__hat = 4           ; â
+v__tilde = 5'm/s     ; ṽ
+```
+
+A double underscore is used specifically because a *single* underscore
+already means a subscript (`Q_dot` renders as `Q` with the literal text
+subscript "dot" — unrelated, and unaffected by this feature). The accent
+combines with everything a plain variable already supports: a subscript
+after the accent (`F__dot_max` → Ḟ with subscript "max"), the `name_{a,b}`
+comma-subscript syntax (`Q__dot_{1,x}` → Q̇ with subscript "1,x"), and
+Greek base symbols (`ω__dot` → ω̇).
+
 ## Project structure
 
 ```text
@@ -356,3 +381,4 @@ tests/                   # pytest test suite
 
 This project is licensed under the GNU General Public License v3.0 (GPL-3.0).
 See the `LICENSE` file for details.
+
