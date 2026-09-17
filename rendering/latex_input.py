@@ -35,6 +35,12 @@ _LATEX_FUNCTION_NAMES = {
     "asin": r"\arcsin", "acos": r"\arccos", "atan": r"\arctan",
     "sinh": r"\sinh", "cosh": r"\cosh", "tanh": r"\tanh",
     "exp": r"\exp", "ln": r"\ln", "log": r"\log",
+    # Not real LaTeX macros of their own -- \operatorname{...} the same
+    # way the generic fallback below would, just with the conventional
+    # capitalized math notation (Re/Im) instead of the lowercase
+    # function names "re"/"im" the user actually types.
+    "re": r"\operatorname{Re}",
+    "im": r"\operatorname{Im}",
 }
 
 # Known constants that SymPy prints as plain identifiers in str(expr)

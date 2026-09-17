@@ -8,6 +8,7 @@ from sympy.physics.units import (
     liter, milli, minute, mol, m, ohm, s,
     convert_to as sympy_convert_to,
 )
+from sympy.physics.units.systems.si import SI
 
 VAR_SYMBOL_PREFIX = "__varsym_"
 BASE_UNITS = (m, kg, s, A, K, mol, cd)
@@ -73,6 +74,19 @@ UNIT_NS = {
     "Wh": 3600 * J,
     "kWh": 3_600_000 * J,
     "MWh": 3_600_000_000 * J,
+
+    "GPa": 1_000_000_000 * Pa,
+
+    # Moment/Torque (force * length) -- dimensionally identical to
+    # energy (J = N*m), but kept as separate names/labels since
+    # engineers write "kNm" for a bending moment, never "kJ" -- same
+    # pattern as Ws/Wh above, which are also just J with a different
+    # display label. Valid as a literal quantity unit too (e.g.
+    # "12'kNm"), unlike "m^4" below which is already expressible via
+    # the existing power grammar ("5'm^4") and doesn't need its own
+    # entry here.
+    "Nm": N * m,
+    "kNm": 1000 * N * m,
 }
 
 UNIT_NAME_SET = frozenset(UNIT_NS.keys())
@@ -97,6 +111,7 @@ GREEK_VARS = {
 PRETTY_UNITS = (
     (bar, r"\mathrm{bar}"),
     (atm, r"\mathrm{atm}"),
+    (1_000_000_000 * Pa, r"\mathrm{GPa}"),
     (1_000_000 * Pa, r"\mathrm{MPa}"),
     (1000 * Pa, r"\mathrm{kPa}"),
     (Pa, r"\mathrm{Pa}"),
@@ -260,6 +275,7 @@ DESIRED_UNIT_MAP = {
     "Pa": (r"\mathrm{Pa}", Pa, 1),
     "kPa": (r"\mathrm{kPa}", Pa, 1000),
     "MPa": (r"\mathrm{MPa}", Pa, 1_000_000),
+    "GPa": (r"\mathrm{GPa}", Pa, 1_000_000_000),
     "bar": (r"\mathrm{bar}", Pa, 100_000),
     "atm": (r"\mathrm{atm}", Pa, 101325),
     "K": (r"\mathrm{K}", K, 1),
@@ -268,6 +284,14 @@ DESIRED_UNIT_MAP = {
     "rpm": (r"\mathrm{rpm}", 1 / s, sp.Rational(1, 60)),
     "deg": (r"^\circ", 1, sp.pi / 180),
     "rad": (r"\mathrm{rad}", 1, 1),
+    # Moment/Torque (force * length): same dimension as J, own label
+    # (see the UNIT_NS comment above for why).
+    "Nm": (r"\mathrm{Nm}", J, 1),
+    "kNm": (r"\mathrm{kNm}", J, 1000),
+    # Second moment of area (Flaechentraegheitsmoment I), length^4.
+    "m^4": (r"\mathrm{m}^4", m**4, 1),
+    "cm^4": (r"\mathrm{cm}^4", m**4, 0.01**4),
+    "mm^4": (r"\mathrm{mm}^4", m**4, 0.001**4),
     "W/(m^2*K)": (r"\frac{\mathrm{W}}{\mathrm{m}^{2}\,\mathrm{K}}", W / (m**2 * K), 1),
     "kW/(m^2*K)": (r"\frac{\mathrm{kW}}{\mathrm{m}^{2}\,\mathrm{K}}", W / (m**2 * K), 1000),
     "W/(m*K)": (r"\frac{\mathrm{W}}{\mathrm{m}\,\mathrm{K}}", W / (m * K), 1),
@@ -399,6 +423,88 @@ def has_only_units_and_numbers(expr):
     return all(sym in UNIT_VALUES for sym in free_symbols)
 
 
+def strip_units_for_plot(expr):
+    """Reduces an expression that may contain unit-bearing quantities
+    (e.g. built from Quantity symbols like m, kg, N, ...) down to a
+    plain numeric SymPy expression, so it can be lambdify()'d/plotted.
+
+    Converts to SI base units first (so e.g. a value built from "kN"
+    becomes a numeric multiple of the base kg*m/s**2 combination),
+    then replaces the SEVEN ATOMIC base-unit symbols (BASE_UNITS: m,
+    kg, s, A, K, mol, cd) with 1 -- NOT the full UNIT_VALUES list of
+    43+ derived unit objects (kN, km, g, mm, ...). Substituting the
+    full derived list in one combined .subs() call is unsafe here:
+    SymPy resolves a dict-subs as a simultaneous replacement using its
+    own internal ordering, and several derived unit objects are
+    themselves compound expressions in terms of the same base symbols
+    (e.g. "km" is literally 1000*m) -- mixing those into the same
+    substitution as the bare "m -> 1" rule was observed to silently
+    multiply results by spurious powers of 1000 (verified with a
+    18750 - 7500*x_pos case turning into 18750000 - 7500000*x_pos).
+    Since convert_to_cached(expr, BASE_UNITS) already guarantees every
+    unit in the result is expressed purely via the 7 base symbols, only
+    those need to be (and safely can be) substituted.
+
+    The plotted variable itself (kept as the one remaining free
+    symbol) is always treated as a plain, unitless number expressed in
+    whatever base unit the rest of the formula implies -- matches how
+    "plot(f(x), x, 0, 2.5)" is meant to be read: x runs from 0 to 2.5
+    in that implied base unit (e.g. meters for a formula built from
+    lengths in meters).
+
+    Deliberately does NOT attempt to also report back which unit that
+    was (e.g. for an axis label): for the common case where the plot
+    variable is combined with a real quantity via "+"/"-" (e.g.
+    "F * (L - x)"), that combination is only dimensionally consistent
+    AFTER this substitution, not before -- so there is no well-formed
+    single "unit" to read off beforehand without already assuming the
+    same base-unit convention. Left as a known, deliberate limit (the
+    plot's y-axis is labelled generically instead, see
+    mathlib/plotting.py).
+    """
+    try:
+        expr_base = convert_to_cached(expr, BASE_UNITS)
+    except Exception:
+        expr_base = expr
+
+    if not (hasattr(expr_base, "has") and expr_base.has(*UNIT_VALUES)):
+        return expr_base
+
+    return expr_base.subs({unit: 1 for unit in BASE_UNITS})
+
+
+def check_addition_dimensions(left, right):
+    """Raises ValueError if `left` and `right` are both fully known
+    quantities (has_only_units_and_numbers(), i.e. no still-unassigned
+    free variable on either side) but have physically incompatible
+    dimensions, e.g. 10'kg + 5'm/s^2.
+
+    Deliberately does NOT fire when either side still contains a real
+    free symbol (an unassigned variable): a formula like "F := m + a"
+    written before m/a are assigned is a supported, purely symbolic use
+    case (see mathlib/sympy_bridge.py's symbolic-placeholder handling)
+    and must keep working.
+
+    Additions across different but COMPATIBLE units (e.g. 5'kg +
+    200'g, both mass) are unaffected: SymPy already merges same-symbol
+    unit factors into a single term while building the Add (see
+    normalize_numeric_quantity()), so those never reach this check as
+    separate terms in the first place -- only genuinely incompatible
+    dimensions survive as a multi-term Add.
+    """
+    if not (has_only_units_and_numbers(left) and has_only_units_and_numbers(right)):
+        return
+
+    dim_left = SI.get_dimensional_expr(left)
+    dim_right = SI.get_dimensional_expr(right)
+
+    if dim_left != dim_right:
+        raise ValueError(
+            f"Cannot add/subtract incompatible units "
+            f"(dimension [{dim_left}] vs [{dim_right}])"
+        )
+
+
 def normalize_numeric_quantity(expr):
     try:
         if has_only_units_and_numbers(expr):
@@ -455,29 +561,33 @@ def format_scalar_with_unit(expr, rel_tol=1e-4):
     return rf"{mag_str}\,{unit_to_pretty_latex(unit)}"
 
 
-def var_to_latex(var_name: str) -> str:
-    if var_name.startswith(VAR_SYMBOL_PREFIX):
-        var_name = var_name[len(VAR_SYMBOL_PREFIX):]
-
-    var_name = normalize_identifiers(var_name)
-
-    if var_name.startswith("Δ") and "_" not in var_name:
-        base = var_name[1:]
-        if base in GREEK_VARS:
-            return r"\Delta" + GREEK_VARS[base]
-
-    if "_" not in var_name:
-        return GREEK_VARS.get(var_name, var_name)
-
-    base, index = var_name.split("_", 1)
-    base = normalize_identifiers(base)
-    index = normalize_identifiers(index)
-
+def _base_symbol_to_latex(base: str) -> str:
+    """Renders a single base symbol (no subscript) to LaTeX: a leading
+    "Δ" combined with a Greek letter (e.g. "Δω" -> "\\Delta\\omega"),
+    a plain Greek letter (GREEK_VARS), or an untouched passthrough for
+    anything else (e.g. "Q" stays "Q"). Factored out of var_to_latex()
+    so the accent handling below (see _ACCENT_RE) can render an
+    accent's base symbol with exactly the same rules as a normal,
+    subscript-only variable's base.
+    """
     if base.startswith("Δ") and base[1:] in GREEK_VARS:
-        base_latex = r"\Delta" + GREEK_VARS[base[1:]]
-    else:
-        base_latex = GREEK_VARS.get(base, base)
+        return r"\Delta" + GREEK_VARS[base[1:]]
+    return GREEK_VARS.get(base, base)
 
+
+def _render_subscript(base_latex: str, index: str) -> str:
+    """Given an already-rendered base symbol's LaTeX and the raw
+    (already normalize_identifiers()'d) subscript text after the
+    first "_", renders the full "base_{subscript}" LaTeX.
+
+    Handles: a Greek-letter subscript (F_ω), a comma-subscript coming
+    from "name_{a,b}" input (see normalize_identifiers()/
+    _COMMA_MARKER), a nested "base_sub_more" subscript, and the plain
+    text fallback. Factored out of var_to_latex() so the accent
+    handling below (Q__dot_max -> "\\dot{Q}_{\\text{max}}") can reuse
+    the exact same subscript rules on an already-accented base instead
+    of duplicating this logic.
+    """
     if index in GREEK_VARS:
         return rf"{base_latex}{GREEK_VARS[index]}"
 
@@ -499,6 +609,74 @@ def var_to_latex(var_name: str) -> str:
 
     safe_index = index.replace("\\", r"\\").replace("_", r"\_")
     return rf"{base_latex}_{{\text{{{safe_index}}}}}"
+
+
+# Accent notation: "Q__dot" -> \dot{Q}, "Q__bar" -> \bar{Q}, etc. --
+# double underscore (never a single one, which is already the existing
+# subscript separator: "Q_dot" keeps meaning a literal text subscript
+# "dot", completely unchanged) directly after the base symbol, BEFORE
+# any subscript. Combines with everything a plain variable already
+# supports: Greek base symbols ("ω__dot" -> \dot{\omega}), and any
+# subscript form including the "name_{a,b}" comma syntax
+# ("Q__dot_{1,x}" -> \dot{Q}_{\text{1,x}}", since
+# normalize_identifiers() mangles the "_{...}" part into the
+# _COMMA_MARKER form -- see _BRACE_SUBSCRIPT_RE -- long before this
+# regex ever runs, so "__dot_{1,x}" and "__dot_1_x" both arrive here
+# already in the same plain-underscore shape).
+#
+# Purely a rendering-layer feature (var_to_latex() is the single,
+# central place every identifier -- LHS variable name or a reference
+# inside a formula -- goes through, see rendering/latex_input.py). No
+# lexer/parser changes needed: "Q__dot" is already a perfectly valid
+# identifier (double underscore is just two underscore characters),
+# so it works as a real, reusable SymPy variable name from the start
+# -- unlike typing raw LaTeX like "\dot{Q}" directly (see the git
+# history around this feature for why that never actually worked).
+ACCENT_MACROS = {
+    "dot": r"\dot",
+    "bar": r"\bar",
+    "hat": r"\hat",
+    "tilde": r"\tilde",
+}
+
+_ACCENT_RE = re.compile(
+    r"^(?P<base>[^_]+)__(?P<accent>" + "|".join(ACCENT_MACROS) + r")(?P<rest>_.*)?$"
+)
+
+
+def var_to_latex(var_name: str) -> str:
+    if var_name.startswith(VAR_SYMBOL_PREFIX):
+        var_name = var_name[len(VAR_SYMBOL_PREFIX):]
+
+    var_name = normalize_identifiers(var_name)
+
+    accent_match = _ACCENT_RE.match(var_name)
+    if accent_match:
+        base = normalize_identifiers(accent_match.group("base"))
+        accent_latex = ACCENT_MACROS[accent_match.group("accent")]
+        accented_base = rf"{accent_latex}{{{_base_symbol_to_latex(base)}}}"
+
+        rest = accent_match.group("rest")
+        if not rest:
+            return accented_base
+
+        index = normalize_identifiers(rest[1:])
+        return _render_subscript(accented_base, index)
+
+    if var_name.startswith("Δ") and "_" not in var_name:
+        base = var_name[1:]
+        if base in GREEK_VARS:
+            return r"\Delta" + GREEK_VARS[base]
+
+    if "_" not in var_name:
+        return GREEK_VARS.get(var_name, var_name)
+
+    base, index = var_name.split("_", 1)
+    base = normalize_identifiers(base)
+    index = normalize_identifiers(index)
+    base_latex = _base_symbol_to_latex(base)
+
+    return _render_subscript(base_latex, index)
 
 
 def is_dimensionless_number(val):

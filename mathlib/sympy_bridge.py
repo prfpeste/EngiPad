@@ -39,7 +39,7 @@ from __future__ import annotations
 import sympy as sp
 
 from mathlib.functions import DISPLAY_FUNCTIONS, NUMERIC_FUNCTIONS, PLOT_FUNCTIONS
-from mathlib.units import UNIT_NS
+from mathlib.units import UNIT_NS, check_addition_dimensions
 from parsing.ast_nodes import (
     BinaryOp,
     FunctionCall,
@@ -101,10 +101,17 @@ def ast_to_sympy(node: Node, var_ns: dict, user_vars: set, mode: str = "numeric"
         left = ast_to_sympy(node.left, var_ns, user_vars, mode)
         right = ast_to_sympy(node.right, var_ns, user_vars, mode)
 
-        if node.op == "+":
-            return left + right
-        if node.op == "-":
-            return left - right
+        if node.op in ("+", "-"):
+            # Only checked in "numeric" mode: that's the only mode
+            # where left/right can actually be real quantities (a
+            # number times a unit). In "display"/"plot" mode, user
+            # variables are fresh symbols with no unit info at all
+            # (see module docstring), so there is nothing to check --
+            # and that's fine, since the numeric-mode evaluation of
+            # the same line already catches a genuine unit mismatch.
+            if mode == "numeric":
+                check_addition_dimensions(left, right)
+            return left + right if node.op == "+" else left - right
         if node.op == "*":
             return left * right
         if node.op == "/":
