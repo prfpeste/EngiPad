@@ -9,7 +9,7 @@ from core.formatter import (
     render_plain_text_item,
 )
 from mathlib.plotting import create_plot
-from mathlib.units import normalize_identifiers
+from mathlib.units import UNIT_VALUES, normalize_identifiers, strip_units_for_plot
 
 
 sp.init_printing()
@@ -56,9 +56,25 @@ def evaluate_code(user_input: str, rel_tol: float = 1e-4):
                     x_min = ctx.eval_plot_bound(args[2]) if len(args) >= 3 else -10
                     x_max = ctx.eval_plot_bound(args[3]) if len(args) >= 4 else 10
 
+                    # Entdimensionieren: a formula built from unit-
+                    # bearing quantities (e.g. "F * (L - x_pos)" with F
+                    # in N and L in m) can't be lambdify()'d/plotted as
+                    # is -- matplotlib/numpy need plain floats. See
+                    # mathlib.units.strip_units_for_plot() for the
+                    # reasoning; bounds are stripped the same way in
+                    # case they were given with a unit too (e.g.
+                    # "plot(f, x, 0'm, 2.5'm)").
+                    had_units = hasattr(func_expr, "has") and func_expr.has(*UNIT_VALUES)
+                    func_expr = strip_units_for_plot(func_expr)
+                    x_min = strip_units_for_plot(x_min)
+                    x_max = strip_units_for_plot(x_max)
+
                     block_items.append({
                         "type": "plot",
-                        "src": create_plot(func_expr, var_symbol, x_min, x_max),
+                        "src": create_plot(
+                            func_expr, var_symbol, x_min, x_max,
+                            note="values in SI base units" if had_units else None,
+                        ),
                     })
                 except Exception as exc:
                     block_items.append({
