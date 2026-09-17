@@ -354,6 +354,17 @@ textarea:focus {
     display: none !important;
   }
 
+  /* The toolbar rule above only hid the buttons -- the header BAR
+     itself (.col-header: background + border-bottom, see the base
+     rule around line 54) stayed visible with just the "Result" title
+     in it, printing as an empty-looking frame/header line at the top
+     of the page. Hide the whole header for the result column instead
+     -- .col-input is already display:none above, so its header goes
+     with it; only .col-result's header was ever left showing. */
+  .col-result .col-header {
+    display: none !important;
+  }
+
   .output-wrap {
     padding: 0 !important;
   }

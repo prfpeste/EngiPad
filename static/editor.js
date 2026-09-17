@@ -142,5 +142,70 @@ function insertSnippet(snippet, cursorOffsetFromEnd) {
   closeAllDropdowns(null);
 }
 
+// --- Autosave / Recovery (localStorage) ---
+//
+// Problem: wird EngiPad in einem iframe eingebettet (z.B. in Moodle) und
+// die umgebende Seite laedt neu (z.B. nach "Absenden und beenden"), laedt
+// der Browser auch den iframe komplett neu -- der Server liefert dann
+// wieder die leere/Beispiel-Startseite aus, der bisherige Lösungsweg ist
+// weg. Das hier merkt sich den zuletzt eingegebenen Text im Browser
+// selbst (nicht auf dem Server) und stellt ihn beim naechsten Laden
+// automatisch wieder her -- solange es derselbe Browser/dasselbe Geraet
+// bleibt.
+//
+// Bewusst NICHT serverseitig geloest: das braeuchte eine verlaessliche
+// Nutzer-Identitaet (z.B. per LTI), die es aktuell nicht gibt. Diese
+// rein lokale Loesung deckt den haeufigsten Fall (Reload derselben
+// Moodle-Sitzung im selben Browser) bereits gut ab.
+
+const AUTOSAVE_KEY = 'engipad_autosave_code';
+const AUTOSAVE_DEBOUNCE_MS = 1000;
+
+// Erkennt, ob das Textfeld noch den unveraenderten Beispieltext zeigt
+// (= frischer Seitenaufruf ohne eigene Eingabe). Nur DANN wird ein
+// gespeicherter Stand automatisch wiederhergestellt -- ein Ergebnis,
+// das der Server gerade erst frisch berechnet und zurueckgeschickt hat
+// (z.B. nach Klick auf "Calculate"), darf NIE ueberschrieben werden.
+function isDefaultExampleText(text) {
+  return text.trim().indexOf('"Example:"') === 0;
+}
+
+function restoreAutosave() {
+  let saved;
+  try {
+    saved = window.localStorage.getItem(AUTOSAVE_KEY);
+  } catch (e) {
+    return; // localStorage nicht verfuegbar (z.B. Privacy-Mode) -- kein Problem, einfach nichts wiederherstellen
+  }
+  if (saved && isDefaultExampleText(codeTextarea.value)) {
+    codeTextarea.value = saved;
+  }
+}
+
+function saveAutosave() {
+  try {
+    window.localStorage.setItem(AUTOSAVE_KEY, codeTextarea.value);
+  } catch (e) {
+    // localStorage nicht verfuegbar oder voll -- Autosave faellt in dem Fall
+    // einfach aus, der Rest der App funktioniert unveraendert weiter.
+  }
+}
+
+function initAutosave() {
+  restoreAutosave();
+
+  let debounceTimer = null;
+  codeTextarea.addEventListener('input', function () {
+    clearTimeout(debounceTimer);
+    debounceTimer = setTimeout(saveAutosave, AUTOSAVE_DEBOUNCE_MS);
+  });
+
+  // Zusaetzliches Sicherheitsnetz: falls der Reload ohne "input"-Event
+  // dazwischen kommt (z.B. Klick direkt auf Moodles "Absenden und
+  // beenden", ohne dass die Debounce-Zeit noch ablaufen konnte).
+  window.addEventListener('beforeunload', saveAutosave);
+}
+
 loadIcons();
 initDropdowns();
+initAutosave();

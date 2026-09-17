@@ -12,6 +12,9 @@ manual check by the user.
 import pytest
 import sympy as sp
 
+from core.context import EvaluationContext
+from core.engine import evaluate_code
+
 
 # ---------------------------------------------------------------------
 # Crash fix: "5'kg + 3'kg" (two added unit literals)
@@ -450,3 +453,314 @@ class TestTanFunction:
         import math
         content = run_content("y = tan(1)", ctx)
         assert f"{math.tan(1):.4f}" in content
+
+
+# ---------------------------------------------------------------------
+# Bug found by a colleague during the debugging session: adding two
+# quantities with physically INCOMPATIBLE units (e.g. a mass and an
+# acceleration) produced garbled, meaningless LaTeX output instead of
+# an error -- e.g. "F = m + a" with m=10'kg, a=5'm/s^2 rendered as
+# "F = m + a = 1\,10.0 kg + 5.0 m/s^2".
+#
+# Root cause: there was no dimensional-consistency check anywhere.
+# SymPy itself doesn't raise on "10*kg + 5*m/s**2" -- it just keeps it
+# as an unevaluated Add of two unlike terms. split_magnitude_unit()/
+# format_scalar_with_unit() (mathlib/units.py) only know how to handle
+# a SINGLE quantity term (number * unit, an sp.Mul), so an Add with
+# two incompatible unit terms fell through to the "1, expr" fallback
+# in split_magnitude_unit(), i.e. the WHOLE sum got misinterpreted as
+# "the unit" -- hence the "1\," prefix and the raw SymPy-printed sum
+# afterwards.
+#
+# Fix: mathlib.units.check_addition_dimensions() compares the SI
+# dimensional expression of both sides of every "+"/"-" (called from
+# mathlib/sympy_bridge.py, "numeric" mode only) and raises a clear
+# ValueError on mismatch, BEFORE the broken formatting path is ever
+# reached. Deliberately does not fire when either side is still an
+# unassigned free variable (has_only_units_and_numbers() is False for
+# those) -- a purely symbolic formula like "F := m + a" written before
+# m/a are assigned is a supported use case and must keep working.
+# ---------------------------------------------------------------------
+class TestIncompatibleUnitAddition:
+    def test_incompatible_units_raise_instead_of_garbled_output(self, ctx, run):
+        run("a = 5'm/s^2", ctx)
+        run("m = 10'kg", ctx)
+        with pytest.raises(ValueError, match="incompatible units"):
+            run("F = m + a", ctx)
+
+    def test_incompatible_units_also_caught_for_subtraction(self, ctx, run):
+        run("a = 5'm/s^2", ctx)
+        run("m = 10'kg", ctx)
+        with pytest.raises(ValueError, match="incompatible units"):
+            run("D = m - a", ctx)
+
+    def test_dimensionless_number_plus_unit_is_also_incompatible(self, ctx, run):
+        # A bare number has dimension "1", not the same as e.g. mass --
+        # adding it to a unit-bearing quantity is a unit error too.
+        with pytest.raises(ValueError, match="incompatible units"):
+            run("X = 5 + 3'kg", ctx)
+
+    def test_same_dimension_different_unit_still_works(self, ctx, run_content):
+        # Regression guard: this must NOT be affected by the fix above.
+        # kg and g are the same dimension (mass) -- SymPy already
+        # merges these into a single term while building the Add
+        # (same underlying unit symbol, different numeric coefficient),
+        # so they never reach check_addition_dimensions() as two
+        # separate terms in the first place.
+        run_content("m1 = 5'kg", ctx)
+        run_content("m2 = 200'g", ctx)
+        assert run_content("S = m1 + m2", ctx) == r"S = m1 + m2 = 5.2\,\mathrm{kg}"
+
+    def test_symbolic_only_formula_with_unassigned_vars_still_works(self, ctx, run_content):
+        # ":=" before m/a are ever assigned: purely symbolic display,
+        # both sides are free variables (no unit info at all yet) --
+        # must NOT be flagged as a unit error. core/engine.py rewrites
+        # ":=" to "=" before calling eval_line() (see evaluate_code()),
+        # so the fixture is given the already-rewritten line here too.
+        content = run_content("F = m + a", ctx, symbolic_only=True)
+        assert content == "F = m + a"
+
+
+# ---------------------------------------------------------------------
+# Feature gap found by a colleague testing a real structural-mechanics
+# example (cantilever beam): several units common in "technische
+# Mechanik" were missing -- literal "'GPa" (E-modulus) wasn't a known
+# unit at all, and "|m^4" (second moment of area) / "|kNm" (bending
+# moment) weren't valid targets for the "|unit" display-conversion
+# syntax, even though the underlying dimensions (Pa, m^4, N*m) were
+# already supported individually.
+# ---------------------------------------------------------------------
+class TestMechanicalEngineeringUnits:
+    def test_gpa_literal_and_pa_conversion(self, ctx, run_content):
+        content = run_content("E = 210'GPa | Pa", ctx)
+        assert content == r"E = 2.1\cdot 10^{11}\,\mathrm{Pa}"
+
+    def test_m4_desired_unit_for_second_moment_of_area(self, ctx, run_content):
+        run_content("b = 80'mm | m", ctx)
+        run_content("h = 140'mm | m", ctx)
+        content = run_content("I = (b * h^3) / 12 | m^4", ctx)
+        assert content.endswith(r"\mathrm{m}^4")
+        assert "1.8293" in content
+
+    def test_nm_and_knm_moment_units(self, ctx, run_content):
+        run_content("F = 7.5'kN | N", ctx)
+        run_content("L = 2.5'm", ctx)
+        content = run_content("M = F * L | kNm", ctx)
+        assert content == r"M = F \cdot L = 18.75\,\mathrm{kNm}"
+
+        content_nm = run_content("M2 = F * L | Nm", ctx)
+        assert content_nm == r"M2 = F \cdot L = 1.875\cdot 10^{4}\,\mathrm{Nm}"
+
+    def test_gpa_still_works_as_a_bare_quantity_without_conversion(self, ctx, run_content):
+        # No explicit "|unit": bare_literal_unit_key() (mathlib/units.py)
+        # makes a bare literal assignment keep its ENTERED unit as the
+        # display unit automatically (same existing behavior as e.g.
+        # "110'degC" staying degC) -- confirms adding "GPa" to
+        # DESIRED_UNIT_MAP correctly plugged it into that existing
+        # mechanism too, not just explicit "|GPa" conversions.
+        content = run_content("E = 210'GPa", ctx)
+        assert content == r"E = 210\,\mathrm{GPa}"
+
+
+# ---------------------------------------------------------------------
+# Bug found by a colleague in the same cantilever-beam example:
+# plot(M(x_pos), x_pos, 0, 2.5) crashed with "Cannot convert expression
+# to float" as soon as the plotted formula (M(x_pos) = F * (L - x_pos),
+# F in N, L in m) contained unit-bearing quantities -- sp.lambdify()/
+# numpy can't evaluate an expression that still has SymPy Quantity
+# objects (N, m, ...) mixed in.
+#
+# Fix: mathlib.units.strip_units_for_plot() (called from
+# core/engine.py's plot branch, on both the function and the bounds)
+# converts to SI base units and substitutes the 7 atomic BASE_UNITS
+# symbols with 1, leaving a plain-numeric expression in the plot
+# variable. See that function's docstring for why it substitutes only
+# BASE_UNITS and not the full UNIT_VALUES list (a real, verified 1000x
+# scaling bug when it was tried the naive way).
+#
+# These tests go through core.engine.evaluate_code() (not just
+# eval_line()) since that's where the plot branch -- and the fix --
+# actually lives.
+# ---------------------------------------------------------------------
+class TestPlotWithUnits:
+    def test_plot_with_unit_bearing_formula_no_longer_crashes(self):
+        code = (
+            "L = 2.5'm\n"
+            "F = 7.5'kN | N\n"
+            "M(x_pos) := F * (L - x_pos)\n"
+            "plot(M(x_pos), x_pos, 0, 2.5)\n"
+        )
+        results = evaluate_code(code)
+        plot_items = [
+            item
+            for block in results
+            for item in block
+            if item.get("type") == "plot"
+        ]
+        error_items = [
+            item
+            for block in results
+            for item in block
+            if item.get("type") == "latex" and "Error" in item.get("content", "")
+        ]
+        assert not error_items
+        assert len(plot_items) == 1
+        assert plot_items[0]["src"].startswith("data:image/png;base64,")
+
+    def test_stripped_plot_values_match_expected_physical_magnitude(self):
+        # Regression guard for the 1000x scaling bug mentioned above:
+        # M(x_pos) = F * (L - x_pos) with F=7500 N, L=2.5 m must be
+        # 18750 (N*m, in SI base units) at x_pos=0, not 18750000.
+        import sympy as sp
+
+        from mathlib.units import strip_units_for_plot
+
+        ctx = EvaluationContext()
+        ctx.eval_line("L = 2.5'm")
+        ctx.eval_line("F = 7.5'kN | N")
+        _, _, _, expr_num, _, _ = ctx.eval_line("M(x_pos) = F * (L - x_pos)")
+
+        stripped = strip_units_for_plot(expr_num)
+        at_zero = sp.N(stripped.subs(sp.Symbol("x_pos"), 0))
+        at_end = sp.N(stripped.subs(sp.Symbol("x_pos"), 2.5))
+
+        assert abs(float(at_zero) - 18750.0) < 1e-6
+        assert abs(float(at_end) - 0.0) < 1e-6
+
+    def test_plot_without_units_is_unaffected(self):
+        # Plain numeric formulas (no units at all) must keep working
+        # exactly as before -- strip_units_for_plot() is a no-op for
+        # them.
+        code = "plot(x^2, x, -2, 2)\n"
+        results = evaluate_code(code)
+        plot_items = [
+            item
+            for block in results
+            for item in block
+            if item.get("type") == "plot"
+        ]
+        assert len(plot_items) == 1
+
+
+# ---------------------------------------------------------------------
+# Feature request from a colleague debugging session: a way to put an
+# accent (dot, bar, hat, tilde) over a letter for variable names, e.g.
+# Q-dot for a time derivative (rate of heat flow) -- distinct from the
+# plain "Q".
+#
+# What was tried first: typing raw LaTeX directly as the variable name
+# ("\dot{Q} = 5'W"). That LOOKED like it worked the first time (MathJax
+# happily renders "\dot{Q}" since it's valid LaTeX on its own), but
+# this was never a real, usable variable: core/context.py::eval_line()
+# takes the left-hand side of "=" as a raw, unparsed string -- it never
+# goes through the lexer at all, so "\dot{Q}" was accepted as a literal
+# dict key and just echoed back through var_to_latex() unchanged
+# (coincidentally valid-looking LaTeX). The FIRST time it was
+# referenced on the right-hand side of another line, that side DOES go
+# through the real lexer/parser, which has no notion of "\" or "{"/"}"
+# -- hence the "Unexpected character" crash reported by the colleague.
+#
+# Fix: a dedicated, fully lexer-legal notation instead -- "Q__dot"
+# (double underscore, to stay clearly distinct from the EXISTING
+# single-underscore subscript syntax "Q_dot" -- literal text subscript
+# "dot", completely unaffected/unchanged). Purely a rendering-layer
+# addition in mathlib/units.py::var_to_latex() (the one central place
+# every identifier -- variable definition or a reference inside a
+# formula -- is rendered through, see rendering/latex_input.py) --
+# "Q__dot" is already a perfectly ordinary, valid identifier as far as
+# the lexer/parser/SymPy are concerned, so no grammar changes were
+# needed, and the variable is fully usable (storable, referenceable in
+# later formulas) from the start, unlike the raw-LaTeX attempt above.
+# ---------------------------------------------------------------------
+class TestAccentNotation:
+    def test_dot_accent_can_be_defined_and_reused(self, ctx, run_content):
+        # The exact scenario that was broken before: define once,
+        # reference again on a later line.
+        content1 = run_content("Q__dot = 5'W", ctx)
+        assert content1 == r"\dot{Q} = 5\,\mathrm{W}"
+
+        content2 = run_content("P = Q__dot * 2", ctx)
+        assert content2 == r"P = \dot{Q} \cdot 2 = 10\,\mathrm{W}"
+
+    def test_bar_hat_tilde_accents(self, ctx, run_content):
+        assert run_content("Q__bar = 3", ctx) == r"\bar{Q} = 3"
+        assert run_content("a__hat = 4", ctx) == r"\hat{a} = 4"
+        assert run_content("v__tilde = 5", ctx) == r"\tilde{v} = 5"
+
+    def test_accent_combined_with_plain_subscript(self, ctx, run_content):
+        content = run_content("F__dot_max = 12'N", ctx)
+        assert content == r"\dot{F}_{\text{max}} = 12\,\mathrm{N}"
+
+    def test_accent_combined_with_brace_comma_subscript(self, ctx, run_content):
+        # "Q__dot_{1,x}" -- the exact notation the user asked to
+        # confirm works, combining the new accent syntax with the
+        # EXISTING "name_{a,b}" comma-subscript feature
+        # (_BRACE_SUBSCRIPT_RE/_COMMA_MARKER in mathlib/units.py).
+        content = run_content("Q__dot_{1,x} = 7", ctx)
+        assert content == r"\dot{Q}_{\text{1,x}} = 7"
+
+    def test_accent_on_a_greek_letter_base(self, ctx, run_content):
+        # Real (unicode) Greek letters are valid identifier characters
+        # already -- omega-dot (angular acceleration) is a common
+        # example in mechanics.
+        content = run_content("ω__dot = 2", ctx)
+        assert content == r"\dot{\omega} = 2"
+
+    def test_plain_single_underscore_subscript_is_unaffected(self, ctx, run_content):
+        # Regression guard: "Q_dot" (ONE underscore) must keep meaning
+        # exactly what it always has -- a literal text subscript "dot"
+        # -- and must NOT be mistaken for the new accent syntax.
+        content = run_content("Q_dot = 9", ctx)
+        assert content == r"Q_{\text{dot}} = 9"
+
+    def test_unsupported_accent_word_falls_back_to_plain_subscript(self, ctx, run_content):
+        # Only dot/bar/hat/tilde are recognized accents (by design, see
+        # mathlib.units.ACCENT_MACROS) -- anything else after a double
+        # underscore is just an ordinary (if unusual-looking) text
+        # subscript, not an error.
+        content = run_content("x__ddot = 1", ctx)
+        assert content == r"x_{\text{ddot}} = 1"
+
+
+# ---------------------------------------------------------------------
+# Same root cause/fix pattern as TestAbsFunction/TestTanFunction above
+# (see mathlib.functions.COMMON_EVAL_FUNCTIONS): "re"/"im" (real/
+# imaginary part of a complex number) were missing from the function
+# whitelist, discovered by a colleague working with the imaginary unit
+# "ⅈ". Symptom was subtly different from the abs/tan case though: it
+# wasn't just an unevaluated-looking placeholder ("re(3.0 + 2.0*i)") --
+# SymPy's OWN latex() printer (the fallback path in
+# core/formatter.py::_sympy_value_to_latex_via_own_parser(), used
+# because an sp.Function('re')(...) placeholder can't round-trip
+# through str()+our own parser) special-cases short, lowercase,
+# undefined function names and prints them as "\re{...}"/"\im{...}" --
+# NOT valid LaTeX/MathJax macros, so the result looked broken/garbled
+# in the browser rather than just "obviously still symbolic". Adding
+# "re"/"im" (and, for the same class of gap, "conjugate"/"arg") to the
+# whitelist fixes both: they now actually compute a real value, so
+# this broken fallback path is never even reached.
+# ---------------------------------------------------------------------
+class TestComplexNumberFunctions:
+    def test_re_of_a_complex_number_is_evaluated(self, ctx, run_content):
+        run_content("z = 3 + 2*ⅈ", ctx)
+        content = run_content("re(z)", ctx)
+        assert content == r"\operatorname{Re}\left(z\right) = 3"
+
+    def test_im_of_a_complex_number_is_evaluated(self, ctx, run_content):
+        run_content("z = 3 + 2*ⅈ", ctx)
+        content = run_content("im(z)", ctx)
+        assert content == r"\operatorname{Im}\left(z\right) = 2"
+
+    def test_conjugate_is_evaluated(self, ctx, run_content):
+        run_content("z = 3 + 2*ⅈ", ctx)
+        content = run_content("conjugate(z)", ctx)
+        assert "3.0 - 2.0" in content and r"\operatorname{conjugate}" in content
+
+    def test_arg_is_evaluated(self, ctx, run_content):
+        run_content("z = 3 + 2*ⅈ", ctx)
+        content = run_content("arg(z)", ctx)
+        assert r"\operatorname{arg}\left(z\right) = 0.588" in content
+
+    def test_re_of_a_real_number_is_just_itself(self, ctx, run_content):
+        content = run_content("re(5)", ctx)
+        assert content.endswith("= 5")
