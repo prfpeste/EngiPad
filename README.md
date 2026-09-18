@@ -19,9 +19,9 @@ It lets you:
 The interface consists of a text editor on the left and a LaTeX/plot output area on the right.
 
 # Download
-[Download for Windows (.exe)](https://github.com/prfpeste/EngiPad/releases/download/v1.1.1/EngiPad-1.1.1-windows-x86_64_rebrand.exe)
+[Download for Windows (.exe)](https://github.com/prfpeste/EngiPad/releases/download/v1.1.2/EngiPad-1.1.1-windows-x86_64.exe)
 
-[Download for Linux (.bin)](https://github.com/prfpeste/EngiPad/releases/download/v1.1.1/EngiPad-1.1.1-linux-x86_64.bin)
+[Download for Linux (.bin)](https://github.com/prfpeste/EngiPad/releases/download/v1.1.2/EngiPad-1.1.2-linux-x86_64.bin)
 
 ## Screenshot
 
