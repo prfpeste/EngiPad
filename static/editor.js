@@ -206,6 +206,36 @@ function initAutosave() {
   window.addEventListener('beforeunload', saveAutosave);
 }
 
+// --- Quit button (only rendered when the server runs locally, see
+// app.py /shutdown): stops the server process, then replaces the page by
+// a short notice (a script can't reliably close a tab it didn't open).
+function initExitButton() {
+  const btn = document.getElementById('exit-btn');
+  if (!btn) return;
+
+  btn.addEventListener('click', function () {
+    if (!window.confirm('Quit EngiPad? The local server will be stopped.')) return;
+    saveAutosave();
+
+    fetch('/shutdown', {
+      method: 'POST',
+      headers: { 'X-Shutdown-Token': btn.getAttribute('data-token') || '' },
+    })
+      .then(function (res) {
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        document.body.innerHTML =
+          '<div style="font-family: sans-serif; text-align: center; margin-top: 20vh;">' +
+          '<h2>EngiPad has been stopped.</h2>' +
+          '<p>You can close this tab now.</p></div>';
+        window.close(); // only works for tabs opened by a script, harmless otherwise
+      })
+      .catch(function () {
+        window.alert('Could not stop EngiPad (the server may already be stopped).');
+      });
+  });
+}
+
 loadIcons();
 initDropdowns();
 initAutosave();
+initExitButton();

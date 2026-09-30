@@ -38,8 +38,19 @@ from __future__ import annotations
 
 import sympy as sp
 
-from mathlib.functions import DISPLAY_FUNCTIONS, NUMERIC_FUNCTIONS, PLOT_FUNCTIONS
-from mathlib.units import UNIT_NS, check_addition_dimensions
+from mathlib.functions import (
+    DIMENSION_MATCHING_FUNCTIONS,
+    DIMENSIONLESS_ARGUMENT_FUNCTIONS,
+    DISPLAY_FUNCTIONS,
+    NUMERIC_FUNCTIONS,
+    PLOT_FUNCTIONS,
+)
+from mathlib.units import (
+    UNIT_NS,
+    check_addition_dimensions,
+    require_dimensionless,
+    require_same_dimension,
+)
 from parsing.ast_nodes import (
     BinaryOp,
     FunctionCall,
@@ -117,6 +128,13 @@ def ast_to_sympy(node: Node, var_ns: dict, user_vars: set, mode: str = "numeric"
         if node.op == "/":
             return left / right
         if node.op == "^":
+            # Same reasoning as for "+"/"-" above (numeric mode only):
+            # the exponent of a power must be dimensionless -- the BASE
+            # may carry a unit ("a^2" -> m^2), but "5'm ^ 10'kg" is
+            # meaningless. A dimensionless exponent that still contains
+            # unit symbols (b/d with kg and g) comes back as a number.
+            if mode == "numeric":
+                right = require_dimensionless(right, "Exponent")
             return left ** right
 
         raise ValueError(f"Unknown operator {node.op!r}")
@@ -124,6 +142,20 @@ def ast_to_sympy(node: Node, var_ns: dict, user_vars: set, mode: str = "numeric"
     if isinstance(node, FunctionCall):
         args = tuple(ast_to_sympy(arg, var_ns, user_vars, mode) for arg in node.args)
         func = table.get(node.name)
+
+        # Numeric mode only (see the "+"/"-" comment above): exp/log/
+        # sin/... need dimensionless arguments, atan2 needs matching
+        # ones. Only applied if the name resolves to the real whitelist
+        # function (func is not None) -- an unknown name stays an inert
+        # placeholder, exactly as before.
+        if mode == "numeric" and func is not None and callable(func):
+            if node.name in DIMENSIONLESS_ARGUMENT_FUNCTIONS:
+                args = tuple(
+                    require_dimensionless(arg, f"Argument of {node.name}()")
+                    for arg in args
+                )
+            elif node.name in DIMENSION_MATCHING_FUNCTIONS:
+                args = require_same_dimension(node.name, args)
 
         if func is not None and callable(func):
             return func(*args)

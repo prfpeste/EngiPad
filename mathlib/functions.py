@@ -99,6 +99,27 @@ COMMON_EVAL_FUNCTIONS = {
     "trace": _trace,
 }
 
+# Functions whose argument(s) must be dimensionless: exp(10 kg) or
+# log(10 kg) are physically meaningless (see
+# mathlib/units.py::require_dimensionless()). Checked by
+# mathlib/sympy_bridge.py in "numeric" mode only. NOT listed on purpose:
+# sqrt/abs/re/im/conjugate/arg (fine with units, e.g. sqrt(9 m^2) = 3 m)
+# and atan2 (arguments need the SAME dimension, not dimensionless --
+# see DIMENSION_MATCHING_FUNCTIONS).
+# Keep in sync with COMMON_EVAL_FUNCTIONS when adding new
+# transcendental functions there.
+DIMENSIONLESS_ARGUMENT_FUNCTIONS = frozenset({
+    "exp", "ln", "log",
+    "sin", "cos", "tan",
+    "asin", "acos", "atan",
+    "sinh", "cosh", "tanh",
+    "asinh", "acosh", "atanh",
+})
+
+# Functions whose arguments may carry a unit but must all have the same
+# dimension (a ratio of them is formed internally).
+DIMENSION_MATCHING_FUNCTIONS = frozenset({"atan2"})
+
 NUMERIC_FUNCTIONS = {
     **COMMON_EVAL_FUNCTIONS,
     "integrate": sp.integrate,

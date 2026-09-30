@@ -12,7 +12,7 @@ mathlib.units.var_to_latex() logic rather than duplicating it.
 
 from __future__ import annotations
 
-from mathlib.units import var_to_latex
+from mathlib.units import UNIT_DISPLAY_OVERRIDES, var_to_latex, wrap_unit_latex
 from parsing.ast_nodes import BinaryOp, FunctionCall, Identifier, Node, Number, Quantity, Subscript, UnaryOp
 
 # Precedence levels, identical to the grammar in parsing/parser.py.
@@ -145,6 +145,9 @@ def _render_binary_op(node: BinaryOp, parent_prec: int, known_vars: frozenset[st
     return _wrap_if_needed(text, prec, parent_prec)
 
 
+_DEGC_LATEX = UNIT_DISPLAY_OVERRIDES["degC"]
+
+
 def _render_quantity(node: Quantity, parent_prec: int, known_vars: frozenset[str]) -> str:
     # magnitude: the "'" visually binds the unit like a multiplication
     # (mag\,unit), so magnitude needs the same parenthesization as a
@@ -157,14 +160,14 @@ def _render_quantity(node: Quantity, parent_prec: int, known_vars: frozenset[str
     if isinstance(node.unit, Identifier) and node.unit.name == "degC":
         # "^\circ\mathrm{C}" instead of "\mathrm{degC}", consistent with
         # mathlib.units.DESIRED_UNIT_MAP["degC"].
-        text = rf"{magnitude}\,^\circ\mathrm{{C}}"
+        text = rf"{magnitude}\,{wrap_unit_latex(_DEGC_LATEX)}"
     else:
         # Unit rendered through its OWN function, not the normal
         # _render(): the role "unit, not variable" is already fixed by
         # position in the tree (right of "'"), not by name -- see the
         # Quantity docstring in parsing/ast_nodes.py.
         unit_latex = _render_unit(node.unit, 0)
-        text = rf"{magnitude}\,{unit_latex}"
+        text = rf"{magnitude}\,{wrap_unit_latex(unit_latex)}"
 
     # Treated like a unary expression: as the base of a power (e.g.
     # "(5'kg)^2") the WHOLE quantity must be parenthesized, otherwise
@@ -202,6 +205,8 @@ def _render_unit(node: Node, parent_prec: int) -> str:
     """
 
     if isinstance(node, Identifier):
+        if node.name in UNIT_DISPLAY_OVERRIDES:
+            return UNIT_DISPLAY_OVERRIDES[node.name]
         safe_name = node.name.replace("\\", r"\\").replace("_", r"\_")
         return rf"\mathrm{{{safe_name}}}"
 
@@ -213,6 +218,10 @@ def _render_unit(node: Node, parent_prec: int) -> str:
 
         if node.op == "^":
             base = _render_unit(node.left, prec + 1)
+            if base.startswith("^"):
+                # "^\circ" as a power base would give a double
+                # superscript ("^\circ^{2}") -- brace it.
+                base = "{" + base + "}"
             exponent = _render_unit(node.right, 0)
             text = f"{base}^{{{exponent}}}"
             return _wrap_if_needed(text, prec, parent_prec)

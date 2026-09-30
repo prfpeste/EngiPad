@@ -1,11 +1,13 @@
 import re
-from functools import lru_cache
+from functools import lru_cache, reduce
 
 import sympy as sp
 from sympy import latex
 from sympy.physics.units import (
     A, J, K, L, N, Pa, R, V, W, atm, bar, cd, centi, hour, kg, km,
     liter, milli, minute, mol, m, ohm, s,
+    Dimension, Quantity,
+    coulomb, day, farad, henry, siemens, tesla, weber,
     convert_to as sympy_convert_to,
 )
 from sympy.physics.units.systems.si import SI
@@ -89,6 +91,120 @@ UNIT_NS = {
     "kNm": 1000 * N * m,
 }
 
+# ---------------------------------------------------------------------
+# Generated unit families (SI prefixes + additional derived SI units)
+# ---------------------------------------------------------------------
+# One spec line per family fills ALL THREE places a unit must exist in,
+# so they cannot drift apart: UNIT_NS (input/evaluation), PRETTY_UNITS
+# (result display) and DESIRED_UNIT_MAP ("| mA"). Names that already
+# exist in UNIT_NS (hand-written above) are never overwritten.
+#
+# Micro is accepted as "u", "µ" (U+00B5) and "μ" (U+03BC) and always
+# DISPLAYED as \mu (see UNIT_DISPLAY_OVERRIDES).
+_R = sp.Rational
+
+# key: (exponent, LaTeX prefix, accepted input spellings)
+_SI_PREFIXES = {
+    "p": (-12, "p", ("p",)),
+    "n": (-9, "n", ("n",)),
+    "u": (-6, None, ("u", "\u00b5", "\u03bc")),
+    "m": (-3, "m", ("m",)),
+    "d": (-1, "d", ("d",)),
+    "h": (2, "h", ("h",)),
+    "k": (3, "k", ("k",)),
+    "M": (6, "M", ("M",)),
+    "G": (9, "G", ("G",)),
+    "T": (12, "T", ("T",)),
+}
+
+# (typed unit, LaTeX of the unit symbol, SI unit it is a multiple of,
+#  scale of the typed unit relative to that SI unit, include the
+#  unprefixed unit itself, prefixes to generate).
+# Order matters where two names have the SAME value (first one wins in
+# PRETTY_UNITS): e.g. mJ before Nmm, hPa before mbar.
+_UNIT_FAMILIES = (
+    # --- prefixes for units that already exist ---
+    ("m", "m", m, 1, False, "nud"),
+    ("s", "s", s, 1, False, "un"),
+    ("g", "g", kg, _R(1, 1000), False, "mu"),
+    ("N", "N", N, 1, False, "mMG"),
+    ("J", "J", J, 1, False, "mT"),
+    ("Wh", "Wh", J, 3600, False, "GT"),
+    ("W", "W", W, 1, False, "umT"),
+    ("Pa", "Pa", Pa, 1, False, "mh"),
+    ("bar", "bar", Pa, 100_000, False, "m"),
+    ("A", "A", A, 1, False, "umk"),
+    ("V", "V", V, 1, False, "umkM"),
+    ("Ohm", "\\Omega", ohm, 1, False, "mkMG"),
+    ("Hz", "Hz", 1 / s, 1, False, "kMG"),
+    ("mol", "mol", mol, 1, False, "mu"),
+    ("L", "L", m**3, _R(1, 1000), False, "m"),
+    ("Nm", "Nm", J, 1, False, "M"),
+    # --- additional units ---
+    ("Nmm", "Nmm", J, _R(1, 1000), True, ""),
+    ("d", "d", s, 86400, True, ""),
+    # --- additional derived SI units ---
+    ("F", "F", farad, 1, True, "mun" + "p"),
+    ("H", "H", henry, 1, True, "mu"),
+    ("C", "C", coulomb, 1, True, "mu"),
+    ("Ah", "Ah", coulomb, 3600, True, "m"),
+    ("S", "S", siemens, 1, True, "m"),
+    ("T", "T", tesla, 1, True, "mu"),
+    ("Wb", "Wb", weber, 1, True, ""),
+)
+
+# LaTeX for names whose typed spelling differs from what should be SHOWN
+# (typing "Ohm" is easier than "Ω"; "to" avoids a clash with the variable
+# "t"). Single source of truth for the result side (PRETTY_UNITS /
+# DESIRED_UNIT_MAP) AND the input echo
+# (rendering/latex_input.py::_render_unit), so both always agree.
+UNIT_DISPLAY_OVERRIDES = {
+    "Ohm": r"\mathrm{\Omega}",
+    "to": r"\mathrm{t}",
+    "deg": r"^\circ",
+    "degC": r"^\circ\mathrm{C}",
+}
+
+# name -> (LaTeX, SI unit, factor), consumed by DESIRED_UNIT_MAP below.
+_GENERATED_DESIRED = {}
+# (value, LaTeX) per distinct generated unit, consumed by PRETTY_UNITS.
+_GENERATED_PRETTY = []
+
+
+def _generate_unit_families():
+    for typed, symbol, base, scale, with_base, prefixes in _UNIT_FAMILIES:
+        variants = []
+        if with_base:
+            variants.append(((typed,), rf"\mathrm{{{symbol}}}", scale))
+        for key in prefixes:
+            exponent, latex_prefix, spellings = _SI_PREFIXES[key]
+            latex = (
+                rf"\mu\mathrm{{{symbol}}}" if latex_prefix is None
+                else rf"\mathrm{{{latex_prefix}{symbol}}}"
+            )
+            variants.append((
+                tuple(spelling + typed for spelling in spellings),
+                latex,
+                scale * _R(10) ** exponent,
+            ))
+
+        for names, latex, factor in variants:
+            value = factor * base
+            added_any = False
+            for name in names:
+                if name in UNIT_NS:
+                    continue
+                UNIT_NS[name] = value
+                _GENERATED_DESIRED[name] = (latex, base, factor)
+                if latex != rf"\mathrm{{{name}}}":
+                    UNIT_DISPLAY_OVERRIDES[name] = latex
+                added_any = True
+            if added_any:
+                _GENERATED_PRETTY.append((value, latex))
+
+
+_generate_unit_families()
+
 UNIT_NAME_SET = frozenset(UNIT_NS.keys())
 
 UNIT_VALUES = tuple(
@@ -163,7 +279,7 @@ PRETTY_UNITS = (
     (K, r"\mathrm{K}"),
     (V, r"\mathrm{V}"),
     (A, r"\mathrm{A}"),
-    (ohm, r"\mathrm{\Omega}"),
+    (ohm, UNIT_DISPLAY_OVERRIDES["Ohm"]),
     (cd, r"\mathrm{cd}"),
 
     (1 / s, r"\mathrm{Hz}"),
@@ -195,6 +311,8 @@ PRETTY_UNITS = (
     (m**2 / s, r"\frac{\mathrm{m}^{2}}{\mathrm{s}}"),
     (m**2, r"\mathrm{m}^{2}"),
     (m**3, r"\mathrm{m}^{3}"),
+
+    *_GENERATED_PRETTY,
 
     (sp.pi / 180, r"^\circ"),
     (1, r""),
@@ -252,7 +370,7 @@ DESIRED_UNIT_MAP = {
     "cd": (r"\mathrm{cd}", cd, 1),
     "A": (r"\mathrm{A}", A, 1),
     "V": (r"\mathrm{V}", V, 1),
-    "Ohm": (r"\mathrm{Ohm}", ohm, 1),
+    "Ohm": (UNIT_DISPLAY_OVERRIDES["Ohm"], ohm, 1),
     "N": (r"\mathrm{N}", N, 1),
     "kN": (r"\mathrm{kN}", N, 1000),
     "N/m^2": (r"\frac{\mathrm{N}}{\mathrm{m}^{2}}", Pa, 1),
@@ -279,7 +397,7 @@ DESIRED_UNIT_MAP = {
     "bar": (r"\mathrm{bar}", Pa, 100_000),
     "atm": (r"\mathrm{atm}", Pa, 101325),
     "K": (r"\mathrm{K}", K, 1),
-    "degC": (r"^\circ\mathrm{C}", K, 1),
+    "degC": (UNIT_DISPLAY_OVERRIDES["degC"], K, 1),
     "Hz": (r"\mathrm{Hz}", 1 / s, 1),
     "rpm": (r"\mathrm{rpm}", 1 / s, sp.Rational(1, 60)),
     "deg": (r"^\circ", 1, sp.pi / 180),
@@ -314,6 +432,9 @@ DESIRED_UNIT_MAP = {
     "Wh/m^3": (r"\frac{\mathrm{Wh}}{\mathrm{m}^{3}}", J / (m**3), 3600),
     "kWh/m^3": (r"\frac{\mathrm{kWh}}{\mathrm{m}^{3}}", J / (m**3), 3_600_000),
 }
+
+for _name, _entry in _GENERATED_DESIRED.items():
+    DESIRED_UNIT_MAP.setdefault(_name, _entry)
 
 UNIT_NAMES_REGEX = "|".join(
     sorted((re.escape(name) for name in UNIT_NS), key=len, reverse=True)
@@ -505,11 +626,126 @@ def check_addition_dimensions(left, right):
         )
 
 
+def _known_dimension(expr):
+    """Returns the SI dimension expression of `expr` if it is a fully
+    known scalar quantity (only numbers and units, no free variable
+    left), otherwise None -- meaning "nothing to check here".
+
+    None is also returned for anything SymPy's dimension machinery
+    can't interpret (matrices, lists, unevaluated exotic functions,
+    ...): the dimension checks below must only ever ADD errors for
+    clearly wrong unit usage, never break an expression that worked
+    before.
+    """
+    if not isinstance(expr, sp.Expr):
+        return None
+
+    if not has_only_units_and_numbers(expr):
+        return None
+
+    try:
+        return SI.get_dimensional_expr(expr)
+    except Exception:
+        return None
+
+
+def _to_pure_number(expr):
+    """A dimensionless quantity may still carry unit symbols that only
+    cancel by a numeric factor (e.g. 5'min / 30'h -> minute/hour, or
+    10'kg / 5'g). Converts such an expression to base units so that a
+    plain number remains. Returns `expr` unchanged if there are no unit
+    symbols in it or the conversion isn't possible.
+    """
+    if not expr.free_symbols:
+        return expr
+
+    try:
+        converted = convert_to_cached(expr, BASE_UNITS)
+    except Exception:
+        return expr
+
+    return converted if not converted.free_symbols else expr
+
+
+def require_dimensionless(expr, what):
+    """Ensures `expr` -- an exponent (`what` = "Exponent") or a function
+    argument (`what` = "Argument of log()", ...) -- is dimensionless.
+
+    Physically, x^y, exp(y), log(y), sin(y), ... are only defined for a
+    dimensionless y: "5 m ^ 10 kg" or "log(10 kg)" have no meaning, and
+    SymPy would happily keep them as an unevaluated Pow()/log() over
+    unit symbols, which then falls apart in the result formatting
+    (garbled LaTeX like "1 (5.0 m)^(10.0 kg)"). Raises ValueError with
+    a clear message instead.
+
+    A dimensionless quantity that still contains unit symbols (e.g.
+    "b/d" with b in kg and d in g) is returned converted to a plain
+    number, so it can be used as an exponent/argument as usual.
+
+    Like check_addition_dimensions(), this deliberately stays silent as
+    long as `expr` still contains a real free symbol (an unassigned
+    variable): purely symbolic formulas such as "f := a^b" before a/b
+    are assigned must keep working. Returns the (possibly converted)
+    expression.
+    """
+    dim = _known_dimension(expr)
+
+    if dim is None or dim == 1:
+        return _to_pure_number(expr) if dim == 1 else expr
+
+    raise ValueError(f"{what} must be dimensionless (got dimension [{dim}])")
+
+
+def require_same_dimension(name, args):
+    """For functions like atan2(y, x) whose arguments may carry a unit
+    but must share the SAME dimension (a ratio is formed internally).
+    Raises ValueError on a mismatch and returns the arguments converted
+    to base units otherwise, so that e.g. atan2(3'm, 4'cm) is computed
+    on consistent numbers. Silent for arguments that aren't fully known
+    quantities (see require_dimensionless()).
+    """
+    dims = [_known_dimension(arg) for arg in args]
+    known = [dim for dim in dims if dim is not None]
+
+    if len(set(known)) > 1:
+        shown = " vs ".join(f"[{dim}]" for dim in known)
+        raise ValueError(
+            f"Arguments of {name}() must have the same dimension "
+            f"(dimension {shown})"
+        )
+
+    if len(known) != len(args):
+        return tuple(args)
+
+    converted = []
+    for arg in args:
+        try:
+            converted.append(convert_to_cached(arg, BASE_UNITS))
+        except Exception:
+            converted.append(arg)
+    return tuple(converted)
+
+
 def normalize_numeric_quantity(expr):
     try:
         if has_only_units_and_numbers(expr):
             try:
                 expr = convert_to_cached(expr, BASE_UNITS)
+            except Exception:
+                pass
+
+            # Fast path: evaluate numerically FIRST. For "number * units"
+            # (the normal case) that is already the final form and
+            # simplify() would only burn time (seconds for a long sum
+            # of exp/cos terms, trigsimp/factor on numeric constants).
+            # Anything not of that simple shape (sums of different unit
+            # terms, complex numbers, functions of units, ...) still
+            # takes the original simplify() path below.
+            try:
+                numeric = sp.N(expr)
+                coeff, rest = numeric.as_coeff_Mul()
+                if coeff.is_number and not rest.atoms(sp.Add, sp.Function):
+                    return numeric
             except Exception:
                 pass
 
@@ -523,7 +759,72 @@ def normalize_numeric_quantity(expr):
     return expr
 
 
-def unit_to_pretty_latex(unit):
+def _total_scale_factor(expr):
+    """Product of the SI scale factors of all quantities in a unit
+    expression (same logic as sympy's convert_to(), without its
+    expensive matrix solve)."""
+    if isinstance(expr, sp.Mul):
+        return reduce(lambda x, y: x * y, [_total_scale_factor(a) for a in expr.args])
+    if isinstance(expr, sp.Pow):
+        return _total_scale_factor(expr.base) ** expr.exp
+    if isinstance(expr, Quantity):
+        return SI.get_quantity_scale_factor(expr)
+    return expr
+
+
+def _unit_signature(unit):
+    """(dimension, scale) of a unit expression, cheap to compute.
+
+    Two units have the same signature exactly when convert_to(a / b,
+    BASE_UNITS) == 1, i.e. when they are the same physical unit up to
+    naming (e.g. N and kg*m/s^2, or Hz and 1/s).
+    """
+    unit = sp.sympify(unit)
+    dimension = Dimension(SI.get_dimensional_expr(unit))
+    dependencies = SI.get_dimension_system().get_dimensional_dependencies(
+        dimension, mark_dimensionless=True
+    )
+    # Float exponents (e.g. m**2.0 after a float computation) must equal
+    # the integer ones: since SymPy 1.13 Float(2.0) != Integer(2).
+    exponents = frozenset(
+        (base_dimension, sp.Rational(exponent) if isinstance(exponent, sp.Float) else exponent)
+        for base_dimension, exponent in dependencies.items()
+    )
+    return exponents, _total_scale_factor(unit)
+
+
+_PRETTY_INDEX = None
+
+
+def _pretty_index():
+    """PRETTY_UNITS grouped by dimension, in the original order (the
+    first matching entry wins, as before). Built once, on first use;
+    takes a few milliseconds, so it is also fine in a fresh process."""
+    global _PRETTY_INDEX
+    if _PRETTY_INDEX is None:
+        index = {}
+        for candidate, latex_str in PRETTY_UNITS:
+            dimension, scale = _unit_signature(candidate)
+            index.setdefault(dimension, []).append((scale, latex_str))
+        _PRETTY_INDEX = index
+    return _PRETTY_INDEX
+
+
+def _find_pretty_latex_fast(unit):
+    """Looks the unit up by (dimension, scale): ONE cheap signature
+    instead of one sympy conversion per PRETTY_UNITS entry (was ~130
+    matrix solves per result). Returns None if there is no entry."""
+    dimension, scale = _unit_signature(unit)
+    for candidate_scale, latex_str in _pretty_index().get(dimension, ()):
+        if abs(sp.N(scale / candidate_scale) - 1) < 1e-12:
+            return latex_str
+    return None
+
+
+def _find_pretty_latex_slow(unit):
+    """The original search (one convert_to per entry). Kept as the
+    fallback if the fast lookup ever raises, and as the reference the
+    tests compare the fast lookup against."""
     for candidate, latex_str in PRETTY_UNITS:
         try:
             ratio = convert_to_cached(unit / candidate, BASE_UNITS)
@@ -531,6 +832,17 @@ def unit_to_pretty_latex(unit):
                 return latex_str
         except Exception:
             continue
+    return None
+
+
+def unit_to_pretty_latex(unit):
+    try:
+        found = _find_pretty_latex_fast(unit)
+    except Exception:
+        found = _find_pretty_latex_slow(unit)
+
+    if found is not None:
+        return found
 
     try:
         unit_base = convert_to_cached(unit, BASE_UNITS)
@@ -538,6 +850,37 @@ def unit_to_pretty_latex(unit):
         unit_base = unit
 
     return latex(unit_base)
+
+
+_UNWRAPPED_UNIT_LATEX = frozenset({r"^\circ"})
+
+
+def wrap_unit_latex(unit_latex: str) -> str:
+    """Wraps the LaTeX of a COMPLETE unit (e.g. "\\mathrm{kg}",
+    "\\frac{\\mathrm{kN}}{\\mathrm{m}^{2}}", "^\\circ") in the
+    \\engiunit{...} marker macro, so units can be displayed smaller
+    than the numbers/variables next to them.
+
+    Deliberately a macro around the WHOLE unit rather than a size
+    command per \\mathrm{...}: exponents and fraction bars belong to
+    the unit as a whole and must scale with it.
+
+    The macro is defined where the LaTeX is finally rendered, NOT here
+    (so the size lives in exactly one place per target):
+      - web view:  templates/index.html (MathJax macro -> CSS class
+                   "engi-unit") + static/main.css (font-size from the
+                   "Unit font size" setting, default 100%)
+      - .tex file: core/latex_export.py (\\newcommand in the preamble,
+                   same setting)
+    Returned unchanged (NOT wrapped): an empty unit (dimensionless),
+    and the bare degree sign of an angle ("^\\circ", unit "deg"): that is
+    a symbol attached to the number rather than a unit abbreviation,
+    and shrunk (e.g. to 75%, as a superscript without a base) it becomes an
+    almost invisible dot. "^\\circ\\mathrm{C}" (degrees Celsius) IS wrapped.
+    """
+    if not unit_latex or unit_latex in _UNWRAPPED_UNIT_LATEX:
+        return unit_latex
+    return rf"\engiunit{{{unit_latex}}}"
 
 
 def format_scalar_with_unit(expr, rel_tol=1e-4):
@@ -558,7 +901,7 @@ def format_scalar_with_unit(expr, rel_tol=1e-4):
     if unit == 1 or not getattr(unit_simpl, "has", lambda *args: False)(*UNIT_VALUES):
         return mag_str
 
-    return rf"{mag_str}\,{unit_to_pretty_latex(unit)}"
+    return rf"{mag_str}\,{wrap_unit_latex(unit_to_pretty_latex(unit))}"
 
 
 def _base_symbol_to_latex(base: str) -> str:
@@ -705,6 +1048,10 @@ _LATEX_TEXT_ESCAPES = {
     # character -- MathJax in the browser is more lenient and displayed
     # the text correctly anyway, which is why the bug wasn't visible
     # just by looking at it in the browser).
+    #
+    # The SAME string is also typeset by MathJax in the browser; the
+    # \textbackslash / \textasciicircum / \textasciitilde macros are
+    # defined for it in templates/index.html.
     "\\": r"\textbackslash{}",
     "%": r"\%",
     "#": r"\#",

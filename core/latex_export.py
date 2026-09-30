@@ -31,8 +31,32 @@ _PREAMBLE = r"""\documentclass[11pt]{article}
 
 \setlength{\parindent}{0pt}
 
+% Units are emitted as \engiunit{...} (mathlib/units.py::wrap_unit_latex()).
+% Size = the "Unit font size" setting of the GUI (see _engiunit_definition()).
+%%ENGIUNIT_DEFINITION%%
+
 \begin{document}
 """
+
+
+def _engiunit_definition(unit_scale: float) -> str:
+    r"""The \newcommand for the \engiunit{...} marker (see
+    mathlib/units.py::wrap_unit_latex()), for the given unit size
+    relative to the surrounding text (1.0 = same size).
+
+    At 1.0 the macro is a plain pass-through: no needless \scalebox
+    box around every unit. Otherwise \scalebox (graphicx, already in
+    the preamble) scales the unit; \displaystyle keeps fractions
+    inside a unit (kN/m^2) at the size they'd have in display math.
+    """
+    if not unit_scale > 0:
+        raise ValueError(f"unit_scale must be positive, got {unit_scale!r}")
+
+    if unit_scale == 1:
+        return r"\newcommand{\engiunit}[1]{#1}"
+
+    return rf"\newcommand{{\engiunit}}[1]{{\scalebox{{{unit_scale:g}}}{{$\displaystyle #1$}}}}"
+
 
 _CLOSING = r"""
 \end{document}
@@ -54,13 +78,18 @@ def _decode_plot_src(src: str) -> tuple[bytes, str]:
     return base64.b64decode(match.group("data")), ext
 
 
-def build_latex_document(results, title: str = "EngiPad Export") -> tuple[str, list[tuple[str, bytes]]]:
+def build_latex_document(
+    results, title: str = "EngiPad Export", unit_scale: float = 1.0
+) -> tuple[str, list[tuple[str, bytes]]]:
     """Builds the .tex source + a list of (filename, image bytes) for
     every plot contained in the results.
 
     results: the same structure returned by core.engine.evaluate_code()
     -- a list of "blocks" (one per input line), each a list of
     {"type": "latex"|"plot"|"spacer", ...} dicts.
+
+    unit_scale: size of units relative to the surrounding text (1.0 =
+    same size, 0.75 = 75%), the "Unit font size" setting of the GUI.
     """
     body_parts: list[str] = []
     images: list[tuple[str, bytes]] = []
@@ -93,7 +122,7 @@ def build_latex_document(results, title: str = "EngiPad Export") -> tuple[str, l
             body_parts.append("\n".join(block_parts))
 
     body = "\n\n".join(body_parts)
-    tex = _PREAMBLE.replace(
+    tex = _PREAMBLE.replace("%%ENGIUNIT_DEFINITION%%", _engiunit_definition(unit_scale)).replace(
         r"\begin{document}",
         f"% {title}\n\\begin{{document}}",
     ) + body + _CLOSING

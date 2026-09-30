@@ -4,11 +4,32 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>EngiPad</title>
+  <link rel="icon" type="image/png" href="{{ url_for('static', filename='favicon.png') }}?v=2">
 
   <!-- MathJax configuration -->
   <script>
     window.MathJax = {
-      tex: {inlineMath: [['$', '$'], ['\\(', '\\)']]},
+      // The html extension provides \class{...}{...}, used by the
+      // \engiunit macro below.
+      // Comments are escaped for pdflatex (mathlib/units.py::
+      // make_safe_text_latex) and typeset by MathJax as well:
+      // - textmacros: makes \text{...} understand \_ \% \# \& \$ \{ \}
+      // - unicode + the three macros below: \textbackslash,
+      //   \textasciicircum, \textasciitilde are unknown to MathJax.
+      loader: {load: ['[tex]/html', '[tex]/textmacros', '[tex]/unicode']},
+      tex: {
+        inlineMath: [['$', '$'], ['\\(', '\\)']],
+        packages: {'[+]': ['html', 'textmacros', 'unicode']},
+        // Units are emitted as \engiunit{...} by the Python side
+        // (mathlib/units.py::wrap_unit_latex()); the size is set in
+        // static/main.css (.engi-unit), driven by the "Unit font size" setting.
+        // The Jinja raw block around the macros line is needed: the
+        // character pair brace+hash would otherwise start a Jinja comment.
+        macros: {% raw %}{engiunit: ['\\class{engi-unit}{#1}', 1],
+                 textbackslash: '$\\unicode{x5C}$',
+                 textasciicircum: '$\\unicode{x5E}$',
+                 textasciitilde: '$\\unicode{x7E}$'}{% endraw %}
+      },
       chtml: {
         displayAlign: 'left',
         displayIndent: '0em'
@@ -21,7 +42,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 
-  <link rel="stylesheet" href="{{ url_for('static', filename='main.css') }}?v=5">
+  <link rel="stylesheet" href="{{ url_for('static', filename='main.css') }}?v=7">
 </head>
 <body>
   <div class="app">
@@ -181,6 +202,20 @@
                   <span class="setting-suffix">px</span>
                 </span>
               </label>
+              <label class="setting-row" for="unitfontsize-input">
+                <span>Unit font size</span>
+                <span class="setting-control">
+                  <input type="text" inputmode="numeric" id="unitfontsize-input" name="unit_font_size" form="calc-form" value="{{ unit_font_size }}">
+                  <span class="setting-suffix">%</span>
+                </span>
+              </label>
+              <label class="setting-row" for="timeout-input" title="Maximum computation time (1-30 s)">
+                <span>Timeout</span>
+                <span class="setting-control">
+                  <input type="text" inputmode="numeric" id="timeout-input" name="timeout" form="calc-form" value="{{ timeout }}">
+                  <span class="setting-suffix">s</span>
+                </span>
+              </label>
             </div>
           </div>
 
@@ -209,18 +244,22 @@
             <div class="dropdown-panel" data-panel>
               <p class="panel-title">EngiPad</p>
               <dl class="info-list">
-                <dt>Version</dt><dd>1.1.2</dd>
+                <dt>Version</dt><dd>1.1.4</dd>
                 <dt>Author</dt><dd>Prof. Dr. Peter Stein</dd>
                 <dt>Built with</dt><dd>Python, Flask, SymPy</dd>
                 <dt>Coding</dt><dd>Claude Sonnet 5</dd>
               </dl>
             </div>
           </div>
+
+          {% if local_mode %}
+          <button type="button" class="tool-btn" id="exit-btn" data-icon="exit" data-token="{{ shutdown_token }}" title="Quit EngiPad (stops the local server)"></button>
+          {% endif %}
         </div>
       </header>
 
       <div class="output-wrap">
-        <div class="output-container" style="font-size: {{ font_size_px }}px;">
+        <div class="output-container" style="font-size: {{ font_size_px }}px; --unit-scale: {{ unit_font_size_pct }}%;">
           {% for block in results %}
             <div class="formula-block">
               {% for item in block %}

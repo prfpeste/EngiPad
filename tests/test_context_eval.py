@@ -522,6 +522,254 @@ class TestIncompatibleUnitAddition:
 
 
 # ---------------------------------------------------------------------
+# Follow-up to the incompatible-addition fix above, also found by
+# colleagues: an EXPONENT and the ARGUMENT of exp/log/sin/... must be
+# dimensionless. "c = a^b" with b in kg or "f = log(b)" used to produce
+# garbled LaTeX like "1 (5.0 m)^(10.0 kg)" instead of an error (SymPy
+# just keeps an unevaluated Pow()/log() over the unit symbols).
+#
+# Just as important: everything that IS valid must keep working --
+# "a^(b/d)" with b and d both masses has a dimensionless exponent and
+# must still evaluate (explicit requirement of the person reporting it).
+# ---------------------------------------------------------------------
+class TestDimensionlessExponentAndArguments:
+    def test_exponent_with_unit_raises(self, ctx, run):
+        run("a = 5'm", ctx)
+        run("b = 10'kg", ctx)
+        with pytest.raises(ValueError, match=r"Exponent must be dimensionless \(got dimension \[mass\]\)"):
+            run("c = a^b", ctx)
+
+    def test_number_base_with_unit_exponent_raises(self, ctx, run):
+        run("a = 5'm", ctx)
+        with pytest.raises(ValueError, match="Exponent must be dimensionless"):
+            run("c = 2^a", ctx)
+
+    def test_unassigned_base_with_unit_exponent_raises(self, ctx, run):
+        # The exponent alone is enough to be wrong, whatever the base.
+        run("w = 2'kg", ctx)
+        with pytest.raises(ValueError, match="Exponent must be dimensionless"):
+            run("c = x^w", ctx)
+
+    def test_log_of_quantity_with_unit_raises(self, ctx, run):
+        run("b = 10'kg", ctx)
+        with pytest.raises(ValueError, match=r"Argument of log\(\) must be dimensionless"):
+            run("f = log(b)", ctx)
+
+    @pytest.mark.parametrize("func, setup, dim", [
+        ("ln", "b = 10'kg", "mass"),
+        ("exp", "b = 10'kg", "mass"),
+        ("sin", "b = 2'm", "length"),
+        ("cos", "b = 2'Hz", "1/time"),
+        ("tan", "b = 2'm", "length"),
+        ("asin", "b = 0.5'm", "length"),
+        ("acos", "b = 0.5'm", "length"),
+        ("atan", "b = 0.5'm", "length"),
+        ("sinh", "b = 2'kg", "mass"),
+        ("cosh", "b = 2'kg", "mass"),
+        ("tanh", "b = 2'kg", "mass"),
+        ("asinh", "b = 2'kg", "mass"),
+        ("acosh", "b = 2'kg", "mass"),
+        ("atanh", "b = 0.5'kg", "mass"),
+    ])
+    def test_all_dimensionless_argument_functions_are_guarded(self, ctx, run, func, setup, dim):
+        run(setup, ctx)
+        with pytest.raises(ValueError, match=rf"Argument of {func}\(\) must be dimensionless.*\[{dim}\]"):
+            run(f"f = {func}(b)", ctx)
+
+    def test_temperature_in_celsius_is_not_dimensionless(self, ctx, run):
+        run("T = 20'degC", ctx)
+        with pytest.raises(ValueError, match="must be dimensionless"):
+            run("f = exp(T)", ctx)
+
+    # --- explicitly required to keep working -------------------------
+
+    def test_ratio_of_same_dimension_as_exponent_still_works(self, ctx, run_content):
+        # The example the reporter asked to keep valid: b/d is a pure
+        # number (kg/kg), only the BASE carries a unit.
+        run_content("a = 5'm", ctx)
+        run_content("b = 10'kg", ctx)
+        run_content("d = 5'kg", ctx)
+        content = run_content("e = a^(b/d)", ctx)
+        assert content == r"e = a^{\frac{b}{d}} = 25\,\mathrm{m}^{2}"
+
+    def test_ratio_of_same_dimension_different_units_as_exponent(self, ctx, run_content):
+        # kg/g is dimensionless too, and must be converted to the real
+        # factor 2000 (not silently treated as 2).
+        run_content("a = 5'm", ctx)
+        run_content("b = 10'kg", ctx)
+        run_content("d = 5'g", ctx)
+        content = run_content("e = a^(b/d)", ctx)
+        assert "Error" not in content
+        assert "2000" in content
+
+    def test_log_of_ratio_of_same_dimension_still_works(self, ctx, run_content):
+        run_content("b = 10'kg", ctx)
+        run_content("d = 5'kg", ctx)
+        content = run_content("f = log(b/d)", ctx)
+        assert content == r"f = \log\left(\frac{b}{d}\right) = 0.30103"
+
+    def test_time_ratio_with_different_units_in_exp(self, ctx, run_content):
+        # min/h: dimensionless, but the unit symbols only cancel by a
+        # numeric factor (5 min / 30 h = 1/360).
+        run_content("t1 = 5'min", ctx)
+        run_content("t2 = 30'h", ctx)
+        content = run_content("f = exp(t1/t2)", ctx)
+        assert content.endswith("= 1.0028")
+
+    def test_angle_units_are_dimensionless(self, ctx, run_content):
+        run_content("phi = 30'deg", ctx)
+        assert run_content("f = sin(phi)", ctx) == r"f = \sin\left(phi\right) = 0.5"
+
+    def test_plain_numbers_unaffected(self, ctx, run_content):
+        assert run_content("f = 2^3", ctx) == r"f = 2^{3} = 8"
+
+    def test_unit_base_with_numeric_exponent_still_works(self, ctx, run_content):
+        run_content("a = 5'm", ctx)
+        assert run_content("f = a^2", ctx) == r"f = a^{2} = 25\,\mathrm{m}^{2}"
+
+    def test_sqrt_and_abs_of_quantities_still_allowed(self, ctx, run_content):
+        # Deliberately NOT in DIMENSIONLESS_ARGUMENT_FUNCTIONS.
+        assert run_content("f = sqrt(9'm^2)", ctx) == r"f = \sqrt{9\,\mathrm{m}^{2}} = 3\,\mathrm{m}"
+        assert run_content("g = abs(-3'kg)", ctx).endswith(r"3\,\mathrm{kg}")
+
+    def test_matrix_power_unaffected(self, ctx, run_content):
+        run_content("M = mat([[1,2],[3,4]])", ctx)
+        assert "22.0" in run_content("f = M^2", ctx)
+
+    def test_symbolic_formulas_with_unassigned_variables_still_work(self, ctx, run_content):
+        # Same contract as for the addition check: nothing is known
+        # about unassigned variables, so nothing may be flagged.
+        assert run_content("f = a^b", ctx, symbolic_only=True) == "f = a^{b}"
+        assert run_content("g = sin(y)", ctx) == r"g = \sin\left(y\right) = \sin\left(y\right)"
+
+    def test_calculus_with_unassigned_variable_unaffected(self, ctx, run_content):
+        content = run_content("f = integrate(sin(x),(x,0,pi))", ctx)
+        assert content.endswith("= 2")
+
+    def test_error_is_shown_as_error_line_via_engine(self):
+        # End to end through evaluate_code(): the user sees a readable
+        # error line, not garbled LaTeX (the original symptom).
+        results = evaluate_code("a=5'm\nb=10'kg\nc=a^b\nf=log(b)")
+        flat = [item["content"] for block in results for item in block]
+        assert any("Error in line 3" in c and "Exponent must be dimensionless" in c for c in flat)
+        assert any("Error in line 4" in c and "Argument of log() must be dimensionless" in c for c in flat)
+        assert not any(r"\text{kg}" in c for c in flat)  # no more raw SymPy unit LaTeX
+
+
+class TestAtan2DimensionMatching:
+    def test_same_dimension_works(self, ctx, run_content):
+        assert run_content("f = atan2(3'm, 4'm)", ctx).endswith("= 0.6435")
+
+    def test_same_dimension_different_units_is_converted(self, ctx, run_content):
+        # 3 m vs 400 cm is the same ratio 3:4 -- must not be computed
+        # on the raw (unconverted) numbers.
+        assert run_content("f = atan2(3'm, 400'cm)", ctx).endswith("= 0.6435")
+
+    def test_different_dimension_raises(self, ctx, run):
+        with pytest.raises(ValueError, match=r"Arguments of atan2\(\) must have the same dimension"):
+            run("f = atan2(3'm, 4'kg)", ctx)
+
+
+# ---------------------------------------------------------------------
+# Units are shown smaller than numbers/variables (75%): every place that
+# emits a unit wraps the COMPLETE unit in \engiunit{...} (see
+# mathlib/units.py::wrap_unit_latex()). The macro itself is defined in
+# templates/index.html (MathJax) and core/latex_export.py (.tex).
+#
+# The shared fixtures unwrap the marker (tests/conftest.py), so these
+# tests use the raw variant to look at the marker itself.
+# ---------------------------------------------------------------------
+class TestUnitSizeMarker:
+    @pytest.fixture
+    def raw(self):
+        from tests.conftest import eval_and_format_raw
+
+        def _raw(line, ctx, symbolic_only=False):
+            return eval_and_format_raw(line, ctx, symbolic_only)["content"]
+
+        return _raw
+
+    def test_bare_literal_result(self, ctx, raw):
+        assert raw("m = 10'kg", ctx) == r"m = 10\,\engiunit{\mathrm{kg}}"
+
+    def test_computed_result_and_input_side_are_both_wrapped(self, ctx, raw):
+        raw("F = 7.5'kN | N", ctx)
+        raw("L = 2.5'm", ctx)
+        content = raw("M = F * L | kNm", ctx)
+        assert content == r"M = F \cdot L = 18.75\,\engiunit{\mathrm{kNm}}"
+
+    def test_input_side_quantity_is_wrapped(self, ctx, raw):
+        # (A pure literal sum like "3'm + 2'm" shows only the value, see
+        # _is_bare_literal_input() -- so a variable is used here to get
+        # the raw formula shown on the input side.)
+        raw("L = 2'm", ctx)
+        content = raw("x = L + 3'm", ctx)
+        assert content == (
+            r"x = L + 3\,\engiunit{\mathrm{m}}"
+            r" = 5\,\engiunit{\mathrm{m}}"
+        )
+
+    def test_whole_compound_unit_is_one_group(self, ctx, raw):
+        # Fraction bar and exponent belong to the unit as a whole and
+        # must scale with it -- one wrapper around all of it, not one
+        # per \mathrm{...} atom.
+        content = raw("k = 5'W/(m^2*K)", ctx)
+        assert content.startswith(r"k = 5\,\engiunit{\frac{\mathrm{W}}{")
+        assert content.count(r"\engiunit") == 1
+
+    def test_zero_with_unit(self, ctx, raw):
+        assert raw("w = 0'J/kg", ctx).endswith(r"0\,\engiunit{\frac{\mathrm{J}}{\mathrm{kg}}}")
+
+    def test_degc_input_and_output(self, ctx, raw):
+        content = raw("T = 110'degC", ctx)
+        assert content == r"T = 110\,\engiunit{^\circ\mathrm{C}}"
+
+    def test_angle_degree_sign_stays_full_size(self, ctx, raw):
+        # A bare "^\\circ" is a symbol, not a unit abbreviation -- at 75%
+        # it would shrink to an almost invisible dot.
+        assert raw("phi = 30'deg", ctx) == r"phi = 30\,^\circ"
+
+    def test_mixed_quantity_and_free_symbol(self, ctx, raw):
+        raw("L = 2'm", ctx)
+        content = raw("A = L * B", ctx)
+        assert content.endswith(r"2\,\engiunit{\mathrm{m}} \cdot B")
+
+    def test_sympy_fallback_unit_without_pretty_entry_is_wrapped(self, ctx, raw):
+        # No PRETTY_UNITS entry -> unit rendered by SymPy's latex().
+        raw("a = 5'm", ctx)
+        content = raw("f = a^0.5", ctx)
+        assert content.endswith(r"\engiunit{\text{m}^{0.5}}")
+
+    def test_numbers_variables_and_functions_are_never_wrapped(self, ctx, raw):
+        raw("a = 5'm", ctx)
+        raw("m = 3", ctx)
+        assert r"\engiunit" not in raw("f = sin(2) + m^2", ctx)
+        # A variable NAMED like a unit is still just a variable:
+        content = raw("n = m * 2", ctx)
+        assert r"\engiunit" not in content
+
+    def test_dimensionless_result_has_no_empty_marker(self, ctx, raw):
+        raw("b = 10'kg", ctx)
+        raw("d = 5'kg", ctx)
+        content = raw("q = b / d", ctx)
+        assert content.endswith("= 2")
+        assert r"\engiunit{}" not in content
+
+    def test_all_markers_are_balanced_in_a_bigger_example(self):
+        from tests.conftest import unwrap_unit_markup
+
+        results = evaluate_code(
+            "F = 7.5'kN | N\nL = 2.5'm\nM = F * L | kNm\nE = 210'GPa\n"
+            "I = 1.8e-5'm^4\nsig = M / I * 0.1'm | MPa\nT = 20'degC\n"
+        )
+        for block in results:
+            for item in block:
+                content = item["content"]
+                assert content.count("{") == content.count("}")
+                assert r"\engiunit" not in unwrap_unit_markup(content)
+
+
+# ---------------------------------------------------------------------
 # Feature gap found by a colleague testing a real structural-mechanics
 # example (cantilever beam): several units common in "technische
 # Mechanik" were missing -- literal "'GPa" (E-modulus) wasn't a known
@@ -764,3 +1012,22 @@ class TestComplexNumberFunctions:
     def test_re_of_a_real_number_is_just_itself(self, ctx, run_content):
         content = run_content("re(5)", ctx)
         assert content.endswith("= 5")
+
+
+class TestOhmInputEcho:
+    r""""R = (100'Ohm) + ..." used to echo "\mathrm{Ohm}" on the input
+    side but show Omega in the result."""
+
+    def test_input_and_result_both_use_omega(self, ctx):
+        from tests.conftest import eval_and_format
+
+        ctx.eval_line("th = 20'degC")
+        content = eval_and_format("R = (100'Ohm) + (0.04'Ohm/K) * th", ctx)["content"]
+        assert r"\mathrm{Ohm}" not in content
+        assert content.count(r"\mathrm{\Omega}") >= 2
+
+    def test_desired_unit_ohm_shows_omega(self, ctx):
+        from tests.conftest import eval_and_format
+
+        content = eval_and_format("y = 5'Ohm | Ohm", ctx)["content"]
+        assert r"\mathrm{Ohm}" not in content

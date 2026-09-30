@@ -19,6 +19,7 @@ from mathlib.units import (
     split_magnitude_unit,
     unit_to_pretty_latex,
     var_to_latex,
+    wrap_unit_latex,
 )
 from parsing.parser import parse
 from rendering.latex_input import to_latex
@@ -276,7 +277,7 @@ def format_computation_result(var, raw_expr, expr_sym, val, desired_unit, symbol
                 raise ValueError(
                     "Cannot display a unitless zero as °C (affine offset)."
                 )
-            mag_with_unit = rf"0\,{desired_latex}"
+            mag_with_unit = rf"0\,{wrap_unit_latex(desired_latex)}"
         elif desired_latex == r"^\circ\mathrm{C}":
             converted_kelvin = convert_to_cached(val, K)
             mag_kelvin, unit_kelvin = split_magnitude_unit(converted_kelvin)
@@ -285,7 +286,7 @@ def format_computation_result(var, raw_expr, expr_sym, val, desired_unit, symbol
 
             mag_celsius = sp.N(mag_kelvin - 273.15)
             mag_str = format_magnitude_decimal(mag_celsius, rel_tol=rel_tol)
-            mag_with_unit = rf"{mag_str}\,{desired_latex}"
+            mag_with_unit = rf"{mag_str}\,{wrap_unit_latex(desired_latex)}"
         else:
             converted_base = convert_to_cached(val, desired_dim_expr)
             mag_base, unit_base = split_magnitude_unit(converted_base)
@@ -295,7 +296,7 @@ def format_computation_result(var, raw_expr, expr_sym, val, desired_unit, symbol
 
             mag_scaled = normalize_numeric_quantity(sp.N(mag_base / scale))
             mag_str = format_magnitude_decimal(mag_scaled, rel_tol=rel_tol)
-            mag_with_unit = rf"{mag_str}\,{desired_latex}"
+            mag_with_unit = rf"{mag_str}\,{wrap_unit_latex(desired_latex)}"
     else:
         if isinstance(val, sp.MatrixBase):
             # Our AST has no matrix node type yet -- deliberately keep

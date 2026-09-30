@@ -132,43 +132,43 @@ class TestIdentifierRendering:
 # ---------------------------------------------------------------------
 class TestQuantityRendering:
     def test_simple_unit(self):
-        assert render("5'kg") == r"5\,\mathrm{kg}"
+        assert render("5'kg") == r"5\,\engiunit{\mathrm{kg}}"
 
     def test_negative_magnitude(self):
-        assert render("-7'kg") == r"-7\,\mathrm{kg}"
+        assert render("-7'kg") == r"-7\,\engiunit{\mathrm{kg}}"
 
     def test_parenthesized_magnitude_keeps_its_parens(self):
         # "(3+4)'kg" must NOT lose the parentheses around "3+4".
-        assert render("(3+4)'kg") == r"\left(3 + 4\right)\,\mathrm{kg}"
+        assert render("(3+4)'kg") == r"\left(3 + 4\right)\,\engiunit{\mathrm{kg}}"
 
     def test_compound_unit_division(self):
-        assert render("5'm^2/s") == r"5\,\frac{\mathrm{m}^{2}}{\mathrm{s}}"
+        assert render("5'm^2/s") == r"5\,\engiunit{\frac{\mathrm{m}^{2}}{\mathrm{s}}}"
 
     def test_compound_unit_with_parens(self):
-        assert render("1'W/(m*K)") == r"1\,\frac{\mathrm{W}}{\mathrm{m}\,\mathrm{K}}"
+        assert render("1'W/(m*K)") == r"1\,\engiunit{\frac{\mathrm{W}}{\mathrm{m}\,\mathrm{K}}}"
 
     def test_quantity_as_power_base_needs_parens(self):
         # "(5'kg)^2" -- the WHOLE quantity must be parenthesized.
-        assert render("(5'kg)^2") == r"\left(5\,\mathrm{kg}\right)^{2}"
+        assert render("(5'kg)^2") == r"\left(5\,\engiunit{\mathrm{kg}}\right)^{2}"
 
     def test_quantity_as_multiplication_factor_needs_no_parens(self):
-        assert render("5'kg * 3") == r"5\,\mathrm{kg} \cdot 3"
+        assert render("5'kg * 3") == r"5\,\engiunit{\mathrm{kg}} \cdot 3"
 
     def test_two_separate_quantities_multiplied(self):
         # "2'kg * 3'm" -- two separate quantities.
-        assert render("2'kg * 3'm") == r"2\,\mathrm{kg} \cdot 3\,\mathrm{m}"
+        assert render("2'kg * 3'm") == r"2\,\engiunit{\mathrm{kg}} \cdot 3\,\engiunit{\mathrm{m}}"
 
     def test_degc_uses_degree_celsius_symbol(self):
         # "^\circ\mathrm{C}" instead of "\mathrm{degC}".
-        assert render("20'degC") == r"20\,^\circ\mathrm{C}"
+        assert render("20'degC") == r"20\,\engiunit{^\circ\mathrm{C}}"
 
     def test_degc_negative(self):
-        assert render("-7'degC") == r"-7\,^\circ\mathrm{C}"
+        assert render("-7'degC") == r"-7\,\engiunit{^\circ\mathrm{C}}"
 
     def test_unit_multiplication_uses_thin_space_not_cdot(self):
         # Within the unit side: "*" -> "\," (PRETTY_UNITS convention),
         # NOT "\cdot" like in normal expressions.
-        assert render("1'kg*m") == r"1\,\mathrm{kg}\,\mathrm{m}"
+        assert render("1'kg*m") == r"1\,\engiunit{\mathrm{kg}\,\mathrm{m}}"
 
 
 # ---------------------------------------------------------------------
@@ -189,3 +189,33 @@ class TestSubscriptRendering:
         # a bit more verbose than strictly necessary (the brackets
         # already group it), but unambiguous.
         assert render("sol[0]^2") == r"\left(sol[0]\right)^{2}"
+
+
+# ---------------------------------------------------------------------
+# Unit display overrides: input echo must show the same symbol as the
+# result ("Ohm" typed -> Omega shown, like degC -> ^\circ C)
+# ---------------------------------------------------------------------
+class TestUnitDisplayOverrides:
+    def test_ohm_shown_as_omega(self):
+        assert render("100'Ohm") == r"100\,\engiunit{\mathrm{\Omega}}"
+
+    def test_ohm_in_compound_unit(self):
+        assert render("0.04'Ohm/K") == (
+            r"0.04\,\engiunit{\frac{\mathrm{\Omega}}{\mathrm{K}}}"
+        )
+
+    def test_tonne_shown_as_t(self):
+        assert render("3'to") == r"3\,\engiunit{\mathrm{t}}"
+
+    def test_deg_shown_as_degree_sign(self):
+        assert render("30'deg") == r"30\,^\circ"
+
+    def test_deg_power_has_no_double_superscript(self):
+        assert render("5'deg^2") == r"5\,\engiunit{{^\circ}^{2}}"
+
+    def test_input_and_result_overrides_agree(self):
+        from mathlib.units import DESIRED_UNIT_MAP, UNIT_DISPLAY_OVERRIDES
+
+        for name, latex in UNIT_DISPLAY_OVERRIDES.items():
+            if name in DESIRED_UNIT_MAP:
+                assert DESIRED_UNIT_MAP[name][0] == latex

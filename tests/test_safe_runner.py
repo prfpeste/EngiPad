@@ -74,7 +74,9 @@ class TestTimeoutIntegrationInApp:
     def test_normal_request_is_unaffected(self, client):
         response = client.post("/", data={"code": "a = 1+1\n", "precision": "0.01"})
         assert response.status_code == 200
-        assert "Timeout" not in response.get_data(as_text=True)
+        # Not just "Timeout": that word is also the label of the
+        # timeout field in the Settings menu.
+        assert "took longer than" not in response.get_data(as_text=True)
 
     def test_timeout_shows_clear_message_instead_of_hanging(self, client, monkeypatch):
         # _hang must be at MODULE level (not defined locally here):

@@ -27,6 +27,40 @@ class TestBuildLatexDocument:
         assert r"\end{document}" in tex
         assert images == []
 
+    def test_preamble_defines_the_unit_size_macro(self):
+        # Results contain \engiunit{...} around every unit (see
+        # mathlib/units.py::wrap_unit_latex()); without this definition
+        # the exported document would not compile.
+        tex, _ = build_latex_document([])
+        assert r"\newcommand{\engiunit}" in tex
+        assert r"\usepackage{graphicx}" in tex  # provides \scalebox
+        assert tex.index(r"\newcommand{\engiunit}") < tex.index(r"\begin{document}")
+
+    def test_default_unit_size_is_a_plain_pass_through(self):
+        # 100%: same size as the text -- no needless \scalebox box
+        # around every unit.
+        tex, _ = build_latex_document([])
+        assert r"\newcommand{\engiunit}[1]{#1}" in tex
+        assert r"\scalebox" not in tex
+
+    def test_unit_scale_is_used_for_the_macro(self):
+        tex, _ = build_latex_document([], unit_scale=0.75)
+        assert r"\newcommand{\engiunit}[1]{\scalebox{0.75}{$\displaystyle #1$}}" in tex
+
+    def test_unit_scale_above_one_works_too(self):
+        tex, _ = build_latex_document([], unit_scale=1.5)
+        assert r"\scalebox{1.5}" in tex
+
+    @pytest.mark.parametrize("bad_scale", [0, -1, float("nan")])
+    def test_invalid_unit_scale_is_rejected(self, bad_scale):
+        with pytest.raises(ValueError, match="unit_scale must be positive"):
+            build_latex_document([], unit_scale=bad_scale)
+
+    def test_exactly_one_macro_definition_and_no_leftover_placeholder(self):
+        tex, _ = build_latex_document([], unit_scale=0.75)
+        assert tex.count(r"\newcommand{\engiunit}") == 1
+        assert "ENGIUNIT_DEFINITION" not in tex
+
     def test_latex_item_is_wrapped_in_display_math(self):
         results = [[{"type": "latex", "content": r"a = 2 + 3 = 5"}]]
         tex, images = build_latex_document(results)
@@ -139,6 +173,32 @@ class TestExportLatexRoute:
         tex = response.get_data(as_text=True)
         assert r"\[ a = \frac{1}{3} = 0.333 \]" in tex
 
+    def test_export_uses_the_submitted_unit_font_size(self, client):
+        response = client.post(
+            "/export/latex",
+            data={"code": "m = 10'kg\n", "unit_font_size": "75"},
+        )
+        tex = response.get_data(as_text=True)
+        assert r"\scalebox{0.75}" in tex
+        assert r"10\,\engiunit{\mathrm{kg}}" in tex
+
+    def test_export_default_unit_size_is_80_percent(self, client):
+        response = client.post("/export/latex", data={"code": "m = 10'kg\n"})
+        tex = response.get_data(as_text=True)
+        assert r"\scalebox{0.8}" in tex
+
+    def test_export_invalid_unit_font_size_falls_back_to_default_80_percent(self, client):
+        response = client.post(
+            "/export/latex", data={"code": "m = 10'kg\n", "unit_font_size": "abc"}
+        )
+        assert r"\scalebox{0.8}" in response.get_data(as_text=True)
+
+    def test_export_100_percent_needs_no_scaling(self, client):
+        response = client.post(
+            "/export/latex", data={"code": "m = 10'kg\n", "unit_font_size": "100"}
+        )
+        assert r"\newcommand{\engiunit}[1]{#1}" in response.get_data(as_text=True)
+
     def test_export_handles_error_lines_gracefully(self, client):
         # A broken line must not crash the export -- evaluate_code()
         # already catches that (error_to_latex()), the export just needs
@@ -198,6 +258,54 @@ class TestTextEscapingForRealLatexCompilation:
 
         results = evaluate_code('"50% off & tax #1 $ {test} ~x^y"\na = 1+1\n')
         tex, _ = build_latex_document(results)
+
+        tex_file = tmp_path / "doc.tex"
+        tex_file.write_text(tex, encoding="utf-8")
+
+        proc = subprocess.run(
+            ["pdflatex", "-interaction=nonstopmode", "-halt-on-error", tex_file.name],
+            cwd=tmp_path,
+            capture_output=True,
+            text=True,
+            timeout=60,
+        )
+
+        assert proc.returncode == 0, proc.stdout[-2000:]
+        assert (tmp_path / "doc.pdf").exists()
+
+
+# ---------------------------------------------------------------------
+# Units are shown smaller (\engiunit macro): the exported document must
+# still compile with a REAL pdflatex run -- for simple units, fractions,
+# exponents and the degree signs, which are the structurally different
+# cases (a plain macro test wouldn't catch e.g. a "^" without base).
+# ---------------------------------------------------------------------
+class TestUnitSizeMacroCompilesWithPdflatex:
+    @pytest.mark.parametrize("unit_scale", [1.0, 0.75, 1.5])
+    def test_document_with_various_units_compiles(self, tmp_path, unit_scale):
+        import shutil
+        import subprocess
+
+        if shutil.which("pdflatex") is None:
+            pytest.skip("pdflatex not installed")
+
+        from core.engine import evaluate_code
+
+        results = evaluate_code(
+            "F = 7.5'kN | N\n"
+            "L = 2.5'm\n"
+            "M = F * L | kNm\n"
+            "A = 3'm^2\n"
+            "k = 5'W/(m^2*K)\n"
+            "T = 110'degC\n"
+            "phi = 30'deg\n"
+            "w = 0'J/kg\n"
+            "x = a^0.5\n"
+            "a = 5'm\n"
+            "y = a^0.5\n"
+        )
+        tex, _ = build_latex_document(results, unit_scale=unit_scale)
+        assert r"\engiunit{" in tex
 
         tex_file = tmp_path / "doc.tex"
         tex_file.write_text(tex, encoding="utf-8")

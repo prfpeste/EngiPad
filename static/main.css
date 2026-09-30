@@ -287,6 +287,18 @@ textarea:focus {
   white-space: normal;
 }
 
+/* Units in the LaTeX output are wrapped in \engiunit{...} (see
+   mathlib/units.py::wrap_unit_latex()); the MathJax macro in
+   templates/index.html turns that into this class. The size is the
+   "Unit font size" setting: app.py passes it to the template, which
+   sets --unit-scale (a percentage, 100% = same size as the numbers)
+   on .output-container. The fallback below only applies if that
+   variable is missing. The size for the .tex export is set in
+   core/latex_export.py from the same setting. */
+.engi-unit {
+  font-size: var(--unit-scale, 100%);
+}
+
 .formula-block img {
   max-width: 100%;
   height: auto;
