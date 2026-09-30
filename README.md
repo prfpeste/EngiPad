@@ -1,5 +1,7 @@
 # EngiPad
 
+![EngiPad logo](static/favicon.png) 
+
 EngiPad is a browser-based calculation notebook for engineers using Python, SymPy, and Matplotlib.
 
 It lets you:
