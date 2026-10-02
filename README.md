@@ -2,7 +2,7 @@
 
 ![EngiPad logo](static/favicon.png) 
 
-EngiPad is a browser-based calculation notebook for engineers using Python, SymPy, and Matplotlib.
+Free, open-source calculation notebook for engineers: physical units, symbolic math, matrices and plots with instant LaTeX output. Print or export to pdflatex-ready .tex. Runs locally on Windows and Linux, no cloud, no account.
 
 It lets you:
 
