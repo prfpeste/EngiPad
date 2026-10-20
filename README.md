@@ -41,9 +41,9 @@ The complete guide (input syntax, units, worksheets, settings, printing and expo
 - Unit system: apostrophe syntax (`10'J`, `5'm`), dimension checks, automatic unit simplification, and explicit target units with `| unit` — any product/quotient/power of known units (`| kWh`, `| J/(kg*K)`)
 - Vectors and matrices: `vec`, `mat`, `det`, `inv`, `dot`, `cross`, `eigenvals`, indexing like `sol[0]`, …
 - Plotting with `plot(f, x, xmin, xmax)`
-- **Pictures:** `picture("name", width=300, align=left)` shows a PNG (button *Insert image*). The pictures are stored in the saved text file (Base64 blocks at its end), appear in the printout and in the LaTeX export; at most 10 pictures, total size limited by a setting (1–3 MB)
-- **Worksheets:** `##Name` sheets in one text file, tabs below the editor (add, rename by double-click, delete), read-only cross-sheet references `Sheet::var`
-- **Live update** on Enter (optional) and **Ctrl+Enter** to calculate
+- Pictures: `picture("name", width=300, align=left)` shows a PNG (button *Insert image*). The pictures are stored in the saved text file (Base64 blocks at its end), appear in the printout and in the LaTeX export; at most 10 pictures, total size limited by a setting (1–3 MB)
+- Worksheets: `##Name` sheets in one text file, tabs below the editor (add, rename by double-click, delete), read-only cross-sheet references `Sheet::var`
+- Live update on Enter (optional) and Ctrl+Enter to calculate
 - Text lines (`"bold"`, `'plain'`, spaces preserved) and `#` comments
 - Greek variables and accent notation (`Q__dot`, `Q__bar`, `Q__hat`, `Q__tilde`)
 - Settings: rounding precision, font size, unit size, sheet-prefix size, print/export all sheets, timeout, image limit, live update
