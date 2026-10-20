@@ -1,26 +1,22 @@
 # EngiPad
 
-![EngiPad logo](static/favicon.png) 
+![EngiPad logo](static/favicon.png)
 
-Free, open-source calculation notebook for engineers: physical units, symbolic math, matrices and plots with instant LaTeX output. Print or export to pdflatex-ready .tex. Runs locally on Windows and Linux, no cloud, no account.
+Free, open-source calculation notebook for engineers: physical units, symbolic math, matrices and plots with instant LaTeX output. Several worksheets in one file, print or export to pdflatex-ready `.tex`. Runs locally on Windows and Linux, no cloud, no account.
 
-It lets you:
-
-- Perform calculations with physical units (`m`, `s`, `kg`, `N`, `J`, `W`, `Pa`, `bar`, `atm`, `V`, `A`, `Ohm`, `K`, `degC`, `Hz`, `rpm`, `L`, …)
-- Convert results explicitly to target units using `|` syntax
-- Do symbolic math (derivatives, integrals, equations, sums, products, limits)
-- Work with vectors and matrices, and pick individual values out of a result (e.g. `solve(...)[0]`)
-- Generate plots directly in the browser
-- View results as nicely formatted LaTeX via MathJax
-- Insert Greek symbols and common function snippets from the UI
-- Load and save calculation files via the web UI
-- Print the output in a print-optimized layout
-- Export the current sheet as a standalone, `pdflatex`-compilable `.tex` document (or a `.zip` if it contains plots)
-- Adjust rounding precision and font size from a settings panel
+- Calculate with physical units (`10'kg`, `5'W/(m*K)`, `2'bar | Pa`) and get dimension checks for free
+- Symbolic math: derivatives, integrals, equations, sums, products, limits
+- Vectors, matrices and plots
+- Results typeset with MathJax while you type (optional live update)
+- **Worksheets:** several named sheets in one file that read each other's values (`Loads::F`)
+- **Undo/Redo:** buttons and `Ctrl+Z`/`Ctrl+Y` for the whole workbook (also sheet add/delete/rename), usable on tablets
+- **Pictures:** show a PNG sketch in the output with `picture("beam", width=400, align=center)`; it is stored inside the saved text file
+- Print or export the sheet(s) as a standalone `.tex` document (with plots and pictures)
 
 The interface consists of a text editor on the left and a LaTeX/plot output area on the right.
 
-# Download
+## Download
+
 [Download for Windows (.exe)](https://github.com/prfpeste/EngiPad/releases/download/v1.1.4/EngiPad-1.1.4-windows-x86_64.exe)
 
 [Download for Linux (.AppImage)](https://github.com/prfpeste/EngiPad/releases/download/v1.1.4/EngiPad-1.1.4-linux-x86_64.AppImage)
@@ -32,42 +28,36 @@ The interface consists of a text editor on the left and a LaTeX/plot output area
 ![EngiPad screenshot](images/SC3.png)
 ![EngiPad screenshot](images/SC4.png)
 
+## User guide
+
+The complete guide (input syntax, units, worksheets, settings, printing and export) is in **[USER_GUIDE.md](USER_GUIDE.md)**.
+
 ## Features
 
 - Web UI using Flask, HTML/CSS/JavaScript and MathJax
-- Expressions are parsed by a small, purpose-built parser and evaluated through a fixed function whitelist — no `eval()`/`sympify()` is ever run on user input (see [Security](#security) below)
-- SymPy integration for
-  - symbolic expressions (`diff`, `integrate`, `Eq`, `solve`, `csolve`, `nsolve`, `sum`, `prod`, `lim`)
-  - numeric evaluation
-  - symbolic display mode via `:=`
-- Unit system with convenient input:
-  - apostrophe syntax for units: `10'J`, `3's`, `5'm`, `10'kg`, `5'W/(m*K)`, …
-  - automatic unit simplification for output
-  - explicit target units using the `|` syntax (for example `| kWh`, `| bar`, `| Pa`, `| m`)
-  - a bare numeric literal (e.g. `110'degC`) keeps the entered unit instead of converting to base SI
-- Plotting function: `plot(f, x, xmin, xmax)` generates a PNG plot with Matplotlib and shows it in the browser
-- Matrix and vector support:
-  - `vec`, `mat`, `Matrix`
-  - `det`, `inv`, `T`, `trace`, `rank`
-  - `dot`, `cross`, `norm`
-  - `eye`, `zeros`, `ones`
-  - `solve_linear`, `eigenvals`, `eigenvects`
-  - indexing into a result with `[...]`, e.g. `sol[0]`, `M[1][2]`
-- Text lines in double quotes (`"..."`) are rendered as bold LaTeX text; single quotes (`'...'`) render as plain (non-bold) text
-- Lines starting with `#` are comments and are ignored
-- Greek variables are automatically rendered as LaTeX symbols
-- Accent notation (`Q__dot`, `Q__bar`, `Q__hat`, `Q__tilde`) puts a dot, bar, hat, or tilde over a variable's base symbol (e.g. for a time derivative `Q̇`), and works as a normal, reusable variable
-- Toolbar buttons: open file, save file, insert Greek letters/symbols, insert function snippets, insert equation/calculus snippets, insert matrix/vector snippets, insert a plot snippet, settings (rounding precision, font size), calculate, print, LaTeX export, info
-- Print stylesheet that hides the editor and prints only the formatted output
-- A configurable computation timeout (10s by default) protects the server against accidentally or intentionally very expensive input
+- Expressions are parsed by a small, purpose-built parser and evaluated through a fixed function whitelist — no `eval()`/`sympify()` is ever run on user input (see [Security](#security))
+- SymPy integration for symbolic expressions (`diff`, `integrate`, `Eq`, `solve`, `csolve`, `nsolve`, `sum`, `prod`, `lim`), numeric evaluation and symbolic display mode (`:=`)
+- Unit system: apostrophe syntax (`10'J`, `5'm`), dimension checks, automatic unit simplification, and explicit target units with `| unit` — any product/quotient/power of known units (`| kWh`, `| J/(kg*K)`)
+- Vectors and matrices: `vec`, `mat`, `det`, `inv`, `dot`, `cross`, `eigenvals`, indexing like `sol[0]`, …
+- Plotting with `plot(f, x, xmin, xmax)`
+- **Pictures:** `picture("name", width=300, align=left)` shows a PNG (button *Insert image*). The pictures are stored in the saved text file (Base64 blocks at its end), appear in the printout and in the LaTeX export; at most 10 pictures, total size limited by a setting (1–3 MB)
+- **Worksheets:** `##Name` sheets in one text file, tabs below the editor (add, rename by double-click, delete), read-only cross-sheet references `Sheet::var`
+- **Live update** on Enter (optional) and **Ctrl+Enter** to calculate
+- Text lines (`"bold"`, `'plain'`, spaces preserved) and `#` comments
+- Greek variables and accent notation (`Q__dot`, `Q__bar`, `Q__hat`, `Q__tilde`)
+- Settings: rounding precision, font size, unit size, sheet-prefix size, print/export all sheets, timeout, image limit, live update
+- Print layout with sheet name in the page header; export to `pdflatex`-compilable `.tex` (or `.zip` with plots and pictures), one sheet or all sheets
+- Configurable computation timeout protects against very expensive input
 
 ## Security
 
 Expressions are evaluated through a custom recursive-descent parser (`parsing/`) and a small AST-to-SymPy bridge (`mathlib/sympy_bridge.py`) that only ever calls a fixed whitelist of functions (`mathlib/functions.py`). Unknown function names become inert symbolic placeholders rather than being executed. No user input is ever passed to Python's `eval()` or SymPy's `sympify()`/`parse_expr()`.
 
-Each computation additionally runs in a separate process with a hard timeout (`core/safe_runner.py`, default 10s) so a single expensive or hanging input can't tie up the server.
+Pictures are accepted as **PNG only** and are checked by their bytes (signature, header, end marker) with hard limits for size and pixel count before anything decodes them, so a small file that would expand to gigabytes is refused. Picture names are restricted to letters, digits and underscore, pictures are never read from a file path on the server, and the browser shows them only as `<img>` (no SVG, no scripts). The LaTeX export checks everything again on the server.
 
-The bundled `run.py` binds to `127.0.0.1` by default — if you expose this on a network beyond localhost, review `app.py`/`run.py` first.
+Each computation additionally runs in a separate process with a hard timeout (`core/safe_runner.py`, default 10 s) so a single expensive or hanging input can't tie up the server.
+
+The bundled `run.py` binds to `127.0.0.1` by default — if you expose this on a network beyond localhost, review `app.py`/`run.py` first. Behind a reverse proxy, allow request bodies of about 8 MB (e.g. nginx `client_max_body_size 8m;`), otherwise the LaTeX export of a sheet with several pictures is refused by the proxy.
 
 ## Requirements
 
@@ -75,29 +65,19 @@ The bundled `run.py` binds to `127.0.0.1` by default — if you expose this on a
 - Python packages: see `requirements.txt` (`Flask`, `Jinja2`, `sympy`, `matplotlib`, `numpy`)
 - For running the test suite: see `requirements-dev.txt` (`pytest`)
 
-Install the runtime dependencies:
-
 ```bash
 pip install -r requirements.txt
 ```
 
 ## Running from source
 
-The main script is `run.py`.
-
-Start the application with:
-
 ```bash
 python run.py
 ```
 
-By default, the Flask application runs on:
+The application runs on `http://127.0.0.1:5000`. As a normal Python script it starts the Flask development server; as a packaged executable it also opens the browser automatically.
 
-```text
-http://127.0.0.1:5000
-```
-
-When running as a normal Python script, it starts the Flask development server. When running as a packaged/frozen executable, it starts the server and opens the browser automatically.
+Optional environment variable: `ENGIPAD_LIVE_DEFAULT=1` or `0` sets whether live update is on by default (on in the local version, off on a server).
 
 ## Running the tests
 
@@ -106,278 +86,14 @@ pip install -r requirements.txt -r requirements-dev.txt
 pytest
 ```
 
-## Building a standalone binary (PyInstaller)
+## Building a standalone binary
 
-You can build a single executable using PyInstaller. A ready-made build script is provided as `build.sh` (Linux/macOS):
-
-```bash
-./build.sh
-```
-
-It creates a virtual environment, installs `pyinstaller` and the runtime requirements, runs PyInstaller, and leaves a single `EngiPad` executable in the project root.
-
-### Manual build
-
-#### 1. Install PyInstaller
-
-```bash
-pip install pyinstaller
-```
-
-#### 2. Project structure
-
-The build bundles both `templates/` and `static/` (CSS, JavaScript, icons) — both are required for the UI to render correctly:
-
-```text
-run.py
-app.py
-core/
-mathlib/
-parsing/
-rendering/
-templates/
-  index.html
-static/
-  main.css
-  editor.js
-  icons/
-```
-
-#### 3. Build the executable on Linux / macOS
-
-```bash
-pyinstaller \
-  --name EngiPad \
-  --onefile \
-  --add-data "templates:templates" \
-  --add-data "static:static" \
-  run.py
-```
-
-After a successful build, the executable will be in the `dist/` folder.
-
-Run it with:
-
-```bash
-./dist/EngiPad
-```
-
-#### 4. Build the executable on Windows
-
-On Windows, the separator in `--add-data` is `;` instead of `:`:
-
-```bash
-pyinstaller ^
-  --name EngiPad ^
-  --onefile ^
-  --add-data "templates;templates" ^
-  --add-data "static;static" ^
-  run.py
-```
-
-The executable will be created in:
-
-```text
-dist\EngiPad.exe
-```
-
-## Usage
-
-### User interface
-
-- Left side: textarea for the calculation code
-- Right side: output area for LaTeX formulas and plots
-
-- Top toolbar (input side):
-  - Open file: load a local text file into the editor
-  - Save file: download the current editor content as a text file
-  - Greek symbols: insert Greek letters and symbols into the editor
-  - Functions: insert common math function snippets
-  - Equations & calculus: insert `diff`, `integrate`, `Eq`, `solve`, `sum`, `prod`, `lim`, … snippets
-  - Matrices / vectors: insert matrix and vector snippets
-  - Plot: insert a `plot(...)` snippet
-  - Settings: rounding precision (%) and font size (px), applied to both panels
-  - Calculate: submit the current code to the server and update the output
-
-- Top toolbar (result side):
-  - Print: open the browser's print dialog with a print-optimized layout
-  - LaTeX export: download the sheet as a `.tex` file, or a `.zip` (containing the `.tex` and any plot images) if it contains at least one plot
-  - Info: version, author, and technology info
-
-### Input syntax
-
-- Basic assignments and calculations
-
-```text
-v = 10'm/s
-t = 3's
-m_a = 10'kg
-F = m_a * v / t
-```
-
-- Multiple commands on one line
-
-```text
-a = 5'm/s^2 ; m = 10'kg ; F = m * a
-```
-
-- Units and target units
-
-```text
-E = 5'kW * 3'h | kWh
-p = 2'bar | Pa
-l = 2500'mm | m
-```
-
-- Symbolic math
-
-```text
-"Symbolic"
-f = x^2
-diff(f, x)
-integrate(f, (x, 0, 1))
-solve(Eq(x^2 - 4, 0), x)
-```
-
-- Symbolic display mode
-
-```text
-f := x^2 + 2*x + 1
-df := diff(f, x)
-```
-
-- Equation solver, and picking one solution out of several
-
-```text
-sol = solve(Eq(x^2 - 5, 0), x)
-x_1 = sol[0] ; x_2 = sol[1]
-nsolve((x^2 - 2), (x), (1))
-```
-
-- Sums, products and limits
-
-```text
-sum(i, (i, 0, n))
-prod(i, (i, 1, n))
-lim(sin(x)/x, x, 0)
-```
-
-- Matrix and vector operations
-
-```text
-v = vec(1, 2, 3)
-w = vec(4, 5, 6)
-dot(v, w)
-cross(v, w)
-norm(v)
-```
-
-```text
-A = mat([[1, 2], [3, 4]])
-det(A)
-inv(A)
-rank(A)
-trace(A)
-```
-
-- Plots
-
-```text
-f = sin(x)
-plot(f, x, 0, 2*pi)
-```
-
-- Comments / text
-
-```text
-# this line is ignored
-"Bold heading or comment"
-'Plain (non-bold) comment'
-```
-
-### Greek variables
-
-Greek letters can be used directly in variable names, for example:
-
-```text
-α = 30'deg
-β = 45'deg
-ΔT = 20'K
-μ = 0.12
-```
-
-### Accent notation
-
-Append `__dot`, `__bar`, `__hat`, or `__tilde` (double underscore) directly
-after a variable's base symbol to put an accent over it — useful for
-things like a time derivative (`Q̇`), an average value (`Q̄`), an
-estimated value (`Q̂`), or an approximate value (`Q̃`):
-
-```text
-Q__dot = 5'W        ; renders as Q̇ = 5 W, and works as a normal variable
-P = Q__dot * 2       ; Q̇ can be reused in later formulas, e.g. P = Q̇ · 2 = 10 W
-
-Q__bar = 3           ; Q̄
-a__hat = 4           ; â
-v__tilde = 5'm/s     ; ṽ
-```
-
-A double underscore is used specifically because a *single* underscore
-already means a subscript (`Q_dot` renders as `Q` with the literal text
-subscript "dot" — unrelated, and unaffected by this feature). The accent
-combines with everything a plain variable already supports: a subscript
-after the accent (`F__dot_max` → Ḟ with subscript "max"), the `name_{a,b}`
-comma-subscript syntax (`Q__dot_{1,x}` → Q̇ with subscript "1,x"), and
-Greek base symbols (`ω__dot` → ω̇).
-
-## Project structure
-
-```text
-run.py                 # entry point: starts the Flask dev server, opens the browser when frozen
-app.py                 # Flask app/routes, settings parsing, LaTeX export route
-build.sh                # PyInstaller build script
-requirements.txt        # runtime dependencies
-requirements-dev.txt     # test-only dependencies (pytest)
-pytest.ini
-conftest.py
-
-parsing/                # lexer + recursive-descent parser -> AST (no eval())
-  lexer.py
-  parser.py
-  ast_nodes.py
-
-rendering/
-  latex_input.py        # AST -> LaTeX renderer for the input/formula side
-
-mathlib/
-  sympy_bridge.py        # safe AST -> SymPy translation (whitelist-only function calls)
-  units.py               # unit table, unit conversion/formatting, LaTeX text escaping
-  functions.py           # whitelisted numeric/display/plot functions
-  solving.py              # solve()/csolve() wrappers
-  plotting.py             # matplotlib plot generation
-
-core/
-  context.py             # EvaluationContext: parses + evaluates a line
-  engine.py               # evaluate_code(): splits input into lines/blocks
-  formatter.py            # builds the final LaTeX for a computed result
-  latex_export.py          # builds a standalone .tex document from results
-  safe_runner.py           # process-based timeout wrapper
-
-templates/
-  index.html             # HTML template with editor, toolbar, panels and MathJax
-
-static/
-  main.css
-  editor.js
-  icons/
-
-tests/                   # pytest test suite
-```
+Ready-made builds are available under [Download](#download). To build your own Linux AppImage or Windows executable/installer, see **[BUILDING.md](BUILDING.md)**.
 
 ## Credits
 
 - Author: Prof. Dr. Peter Stein
-- Coding: Claude Sonnet 5 (Anthropic) — the implementation, architecture, tests, and documentation in this repository were written with Claude Sonnet 5 as an AI coding assistant.
+- Coding: Claude (Anthropic) — the implementation, architecture, tests, and documentation were written with Claude as an AI coding assistant.
 
 ## License
 
@@ -385,4 +101,3 @@ This project is licensed under the GNU General Public License v3.0 (GPL-3.0).
 See the `LICENSE` file for details.
 
 This project uses ICONS from [Lucide Icons](https://lucide.dev/)
-
