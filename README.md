@@ -8,9 +8,9 @@ Free, open-source calculation notebook for engineers: physical units, symbolic m
 - Symbolic math: derivatives, integrals, equations, sums, products, limits
 - Vectors, matrices and plots
 - Results typeset with MathJax while you type (optional live update)
-- **Worksheets:** several named sheets in one file that read each other's values (`Loads::F`)
-- **Undo/Redo:** buttons and `Ctrl+Z`/`Ctrl+Y` for the whole workbook (also sheet add/delete/rename), usable on tablets
-- **Pictures:** show a PNG sketch in the output with `picture("beam", width=400, align=center)`; it is stored inside the saved text file
+- Worksheets: several named sheets in one file that read each other's values (`Loads::F`)
+- Undo/Redo: buttons and `Ctrl+Z`/`Ctrl+Y` for the whole workbook (also sheet add/delete/rename), usable on tablets
+- Pictures: show a PNG sketch in the output with `picture("beam", width=400, align=center)`; it is stored inside the saved text file
 - Print or export the sheet(s) as a standalone `.tex` document (with plots and pictures)
 
 The interface consists of a text editor on the left and a LaTeX/plot output area on the right.
