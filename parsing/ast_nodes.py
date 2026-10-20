@@ -24,6 +24,18 @@ class Identifier:
 
 
 @dataclass(frozen=True)
+class SheetRef:
+    """A reference to a variable of ANOTHER sheet, written
+    "Sheet::name" (e.g. "S1::L"). Read-only: it is resolved against the
+    final value of that variable in the other sheet (see
+    core/workbook.py), never assigned to.
+    """
+
+    sheet: str
+    name: str
+
+
+@dataclass(frozen=True)
 class UnaryOp:
     """Unary operation, e.g. -x or +x."""
 
@@ -114,4 +126,4 @@ class Subscript:
 
 
 # Union type for type annotations elsewhere (parser, renderer).
-Node = Union[Number, Identifier, UnaryOp, BinaryOp, FunctionCall, Quantity, ListLiteral, Subscript]
+Node = Union[Number, Identifier, SheetRef, UnaryOp, BinaryOp, FunctionCall, Quantity, ListLiteral, Subscript]

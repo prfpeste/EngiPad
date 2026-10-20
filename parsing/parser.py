@@ -10,6 +10,7 @@ parsing.lexer. Classic precedence hierarchy (low -> high):
     power      : postfix ("^" unary)?        # right-associative
     postfix    : primary ("[" additive "]")*  # e.g. sol[0], M[1][2]
     primary    : NUMBER
+               | IDENT "::" IDENT              # sheet reference S1::L
                | IDENT ("(" (expr ("," expr)*)? ")")?
                | "(" expr ")"
                | "[" (expr ("," expr)*)? "]"
@@ -58,6 +59,7 @@ from parsing.ast_nodes import (
     Node,
     Number,
     Quantity,
+    SheetRef,
     Subscript,
     UnaryOp,
 )
@@ -65,6 +67,7 @@ from parsing.lexer import (
     APOSTROPHE,
     CARET,
     COMMA,
+    DCOLON,
     EOF,
     IDENT,
     LBRACKET,
@@ -281,6 +284,13 @@ class Parser:
 
         if tok.type == IDENT:
             self._advance()
+
+            if self._peek().type == DCOLON:
+                # Sheet reference "Sheet::name" (read-only, see
+                # parsing.ast_nodes.SheetRef).
+                self._advance()
+                name_tok = self._expect(IDENT)
+                return SheetRef(tok.value, name_tok.value)
 
             if self._peek().type == LPAREN:
                 self._advance()

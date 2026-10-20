@@ -15,6 +15,7 @@ from mathlib.units import (
     format_magnitude_decimal,
     format_scalar_with_unit,
     make_safe_text_latex,
+    text_to_latex,
     normalize_numeric_quantity,
     split_magnitude_unit,
     unit_to_pretty_latex,
@@ -53,8 +54,7 @@ def expr_to_latex(expr, user_vars_key=()):
 
 
 def render_plain_text_item(text: str, bold: bool = False):
-    safe = make_safe_text_latex(text)
-    content = rf"\textbf{{{safe}}}" if bold else rf"\text{{{safe}}}"
+    content = text_to_latex(text, "textbf" if bold else "text")
     return {
         "type": "latex",
         "content": content,

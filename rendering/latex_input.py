@@ -13,7 +13,9 @@ mathlib.units.var_to_latex() logic rather than duplicating it.
 from __future__ import annotations
 
 from mathlib.units import UNIT_DISPLAY_OVERRIDES, var_to_latex, wrap_unit_latex
-from parsing.ast_nodes import BinaryOp, FunctionCall, Identifier, Node, Number, Quantity, Subscript, UnaryOp
+from parsing.ast_nodes import (
+    BinaryOp, FunctionCall, Identifier, Node, Number, Quantity, SheetRef, Subscript, UnaryOp,
+)
 
 # Precedence levels, identical to the grammar in parsing/parser.py.
 _ADDITIVE_PREC = 1
@@ -83,6 +85,9 @@ def _render(node: Node, parent_prec: int, known_vars: frozenset[str]) -> str:
         if node.name in _IDENTIFIER_LATEX_OVERRIDES and node.name not in known_vars:
             return _IDENTIFIER_LATEX_OVERRIDES[node.name]
         return var_to_latex(node.name)
+
+    if isinstance(node, SheetRef):
+        return var_to_latex(f"{node.sheet}::{node.name}")
 
     if isinstance(node, UnaryOp):
         operand = _render(node.operand, _UNARY_PREC, known_vars)

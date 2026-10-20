@@ -36,6 +36,9 @@ EvaluationContext.make_eval_env()):
 
 from __future__ import annotations
 
+import contextlib
+import contextvars
+
 import sympy as sp
 
 from mathlib.functions import (
@@ -59,6 +62,7 @@ from parsing.ast_nodes import (
     Node,
     Number,
     Quantity,
+    SheetRef,
     Subscript,
     UnaryOp,
 )
@@ -70,6 +74,22 @@ _FUNCTION_TABLES = {
 }
 
 _DEGC_OFFSET = sp.Float("273.15")
+
+# Resolver for sheet references ("S1::L"): a callable (sheet, name) ->
+# value, provided by the workbook evaluation (core/workbook.py) via
+# sheet_lookup_scope(). A context variable instead of an extra
+# parameter on every recursive call; without a workbook it is None and
+# every sheet reference is a clean error.
+_SHEET_LOOKUP = contextvars.ContextVar("engipad_sheet_lookup", default=None)
+
+
+@contextlib.contextmanager
+def sheet_lookup_scope(lookup):
+    token = _SHEET_LOOKUP.set(lookup)
+    try:
+        yield
+    finally:
+        _SHEET_LOOKUP.reset(token)
 
 
 def _number_to_sympy(value: str):
@@ -103,6 +123,17 @@ def ast_to_sympy(node: Node, var_ns: dict, user_vars: set, mode: str = "numeric"
             return table[name]
 
         return sp.Symbol(name)
+
+    if isinstance(node, SheetRef):
+        if mode == "display":
+            # Display mode shows the formula, not the value: a fresh
+            # symbol whose name var_to_latex() renders as "S1::L".
+            return sp.Symbol(f"{node.sheet}::{node.name}")
+
+        lookup = _SHEET_LOOKUP.get()
+        if lookup is None:
+            raise ValueError(f"Sheet '{node.sheet}' does not exist.")
+        return lookup(node.sheet, node.name)
 
     if isinstance(node, UnaryOp):
         value = ast_to_sympy(node.operand, var_ns, user_vars, mode)

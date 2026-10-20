@@ -1031,3 +1031,115 @@ class TestOhmInputEcho:
 
         content = eval_and_format("y = 5'Ohm | Ohm", ctx)["content"]
         assert r"\mathrm{Ohm}" not in content
+
+
+class TestEpsilonRendering:
+    def test_epsilon_uses_varepsilon(self, ctx, run_content):
+        # \epsilon renders as the lunate "ϵ" (Euro-like) in TeX/MathJax;
+        # the usual curly ε is \varepsilon.
+        content = run_content("ε = 0.5", ctx)
+        assert r"\varepsilon" in content
+        assert r"\epsilon" not in content.replace(r"\varepsilon", "")
+
+
+class TestZeroWithUnitInAddition:
+    """0'm collapses to a plain 0 in SymPy; it must not trigger the
+    incompatible-units error when added to / subtracted from a real
+    quantity."""
+
+    def test_zero_length_plus_length(self, ctx, run_content):
+        run_content("z_1 = 0'm", ctx)
+        run_content("z_2 = 15'm", ctx)
+        content = run_content("dz = z_1 + z_2", ctx)
+        assert "Error" not in content
+        assert content.endswith(r"= 15\,\mathrm{m}")
+
+    def test_length_minus_zero_length(self, ctx, run_content):
+        run_content("a = 0'm", ctx)
+        content = run_content("b = a - 3'm", ctx)
+        assert "Error" not in content
+        assert content.endswith(r"= -3\,\mathrm{m}")
+
+    def test_zero_degC_is_not_a_plain_zero(self, ctx, run_content):
+        # 0 degC = 273.15 K keeps its dimension, so mismatches still fail.
+        run_content("t = 0'degC", ctx)
+        with pytest.raises(ValueError, match="incompatible units"):
+            run_content("u = t + 5'm", ctx)
+
+    def test_nonzero_number_plus_unit_still_errors(self, ctx, run_content):
+        with pytest.raises(ValueError, match="incompatible units"):
+            run_content("x = 5 + 3'kg", ctx)
+
+
+class TestGenericDesiredUnits:
+    """'| unit' accepts any compound of known units, not only the fixed
+    DESIRED_UNIT_MAP entries."""
+
+    def test_mass_flow_g_per_h(self, ctx, run_content):
+        content = run_content("m = 5'kg/s | g/h", ctx)
+        assert content == r"m = 1.8\cdot 10^{7}\,\frac{\mathrm{g}}{\mathrm{h}}"
+
+    def test_tonnes_per_day(self, ctx, run_content):
+        content = run_content("x = 3'kg/s | to/d", ctx)
+        assert content == r"x = 259.2\,\frac{\mathrm{t}}{\mathrm{d}}"
+
+    def test_speed_conversion(self, ctx, run_content):
+        content = run_content("v = 36'km/h | m/s", ctx)
+        assert content == r"v = 10\,\frac{\mathrm{m}}{\mathrm{s}}"
+
+    def test_entropy_unit(self, ctx, run_content):
+        content = run_content("c = 5'J/K | kJ/K", ctx)
+        assert content == r"c = 0.005\,\frac{\mathrm{kJ}}{\mathrm{K}}"
+
+    def test_product_unit(self, ctx, run_content):
+        content = run_content("x = 2'kg*m^2 | g*cm^2", ctx)
+        assert content.endswith(r"\mathrm{g}\,\mathrm{cm}^{2}")
+
+    def test_incompatible_dimension_errors(self, ctx, run_content):
+        with pytest.raises(ValueError, match="not compatible"):
+            run_content("x = 3'm | km/h", ctx)
+
+    def test_unknown_unit_errors(self, ctx, run_content):
+        with pytest.raises(ValueError, match="Unknown desired unit"):
+            run_content("x = 3'kg | foo", ctx)
+
+    def test_degC_inside_compound_is_rejected(self, ctx, run_content):
+        with pytest.raises(ValueError):
+            run_content("x = 3'm | degC/s", ctx)
+
+    def test_fixed_table_entries_unchanged(self, ctx, run_content):
+        assert run_content("x = 3'h | min", ctx) == r"x = 180\,\mathrm{min}"
+
+
+class TestJoulePerKelvinDisplay:
+    def test_joule_per_kelvin_shown_as_unit(self, ctx, run_content):
+        content = run_content("c = 5'J/K", ctx)
+        assert content == r"c = 5\,\frac{\mathrm{J}}{\mathrm{K}}"
+
+    def test_entropy_times_temperature_gives_joule(self, ctx, run_content):
+        run_content("S = 3'J/K", ctx)
+        run_content("T = 2'K", ctx)
+        assert run_content("Q = S*T", ctx).endswith(r"= 6\,\mathrm{J}")
+
+
+class TestTextKeepsSpaceRuns:
+    """Several spaces / leading spaces in comments and text lines must
+    survive (plain \\text{} collapses them in MathJax and LaTeX)."""
+
+    def test_helper_keeps_runs_and_edges(self):
+        from mathlib.units import text_to_latex
+        assert text_to_latex("a  b") == r"\text{a}\ \ \text{b}"
+        assert text_to_latex("   [1]") == r"\ \ \ \text{[1]}"
+        assert text_to_latex("a b") == r"\text{a b}"
+        assert text_to_latex("x ", "textbf") == r"\textbf{x}\ "
+        assert text_to_latex("") == r"\text{}"
+
+    def test_comment_with_leading_spaces_in_engine(self):
+        from core.engine import evaluate_code
+        results = evaluate_code("L = 3 ;'      [1]'")
+        content = results[0][0]["content"]
+        assert content.endswith(r"\ \ \ \ \ \ \text{[1]}")
+
+    def test_special_characters_still_escaped(self):
+        from mathlib.units import text_to_latex
+        assert text_to_latex("50%  off") == r"\text{50\%}\ \ \text{off}"

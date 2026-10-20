@@ -4,10 +4,11 @@ from core.context import EvaluationContext, split_top_level
 from core.formatter import (
     error_to_latex,
     format_computation_result,
-    make_safe_text_latex,
+    text_to_latex,
     merge_latex_items,
     render_plain_text_item,
 )
+from core.images import parse_picture_call
 from mathlib.plotting import create_plot
 from mathlib.units import UNIT_VALUES, normalize_identifiers, strip_units_for_plot
 
@@ -21,8 +22,19 @@ DEFAULT_INPUT = (
 )
 
 
-def evaluate_code(user_input: str, rel_tol: float = 1e-4):
-    ctx = EvaluationContext()
+def evaluate_code(user_input: str, rel_tol: float = 1e-4, image_names=None):
+    return evaluate_lines(user_input, rel_tol, EvaluationContext(), image_names)
+
+
+def evaluate_lines(user_input: str, rel_tol: float, ctx: EvaluationContext, image_names=None):
+    """Evaluates the lines of ONE sheet with the given context (the
+    workbook evaluation in core/workbook.py passes a context that can
+    resolve references to other sheets).
+
+    image_names: names of the images that are loaded (for picture(...)
+    lines). None = unknown, then picture() lines are not checked against
+    a list (the image data never travels with the calculation, see
+    core/images.py)."""
     results = []
 
     for line_no, raw_line in enumerate(user_input.splitlines(), start=1):
@@ -46,6 +58,22 @@ def evaluate_code(user_input: str, rel_tol: float = 1e-4):
 
             if stripped.startswith("'") and stripped.endswith("'") and len(stripped) >= 2:
                 block_items.append(render_plain_text_item(stripped[1:-1], bold=False))
+                continue
+
+            if stripped.startswith("picture(") and stripped.endswith(")"):
+                try:
+                    spec = parse_picture_call(stripped)
+                    if image_names is not None and spec["name"] not in image_names:
+                        raise ValueError(
+                            f"Image '{spec['name']}' is not loaded. "
+                            "Use the 'Insert image' button to add it."
+                        )
+                    block_items.append({"type": "image", **spec})
+                except Exception as exc:
+                    block_items.append({
+                        "type": "latex",
+                        "content": error_to_latex(f"Error in line {line_no}: {stripped}", exc),
+                    })
                 continue
 
             if stripped.startswith("plot(") and stripped.endswith(")"):
@@ -79,7 +107,7 @@ def evaluate_code(user_input: str, rel_tol: float = 1e-4):
                 except Exception as exc:
                     block_items.append({
                         "type": "latex",
-                        "content": rf"\text{{{make_safe_text_latex(f'Error while plotting: {exc}')}}}",
+                        "content": text_to_latex(f'Error while plotting: {exc}'),
                     })
                 continue
 

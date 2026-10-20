@@ -86,7 +86,7 @@ class TestTimeoutIntegrationInApp:
         # local object").
         import app as app_module
 
-        monkeypatch.setattr(app_module, "evaluate_code", _hang)
+        monkeypatch.setattr(app_module, "evaluate_workbook", _hang)
         monkeypatch.setattr(app_module, "DEFAULT_TIMEOUT_SECONDS", 0.5)
 
         start = time.time()
@@ -100,7 +100,7 @@ class TestTimeoutIntegrationInApp:
     def test_export_route_also_respects_timeout(self, client, monkeypatch):
         import app as app_module
 
-        monkeypatch.setattr(app_module, "evaluate_code", _hang)
+        monkeypatch.setattr(app_module, "evaluate_workbook", _hang)
         monkeypatch.setattr(app_module, "DEFAULT_TIMEOUT_SECONDS", 0.5)
 
         start = time.time()

@@ -207,6 +207,16 @@ body {
   gap: 4px;
 }
 
+.setting-control select {
+  height: 28px;
+  padding: 0 4px;
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+  font-family: var(--font-sans);
+  font-size: 13px;
+  background: #ffffff;
+}
+
 .setting-control input[type="text"] {
   width: 64px;
   height: 28px;
@@ -299,12 +309,139 @@ textarea:focus {
   font-size: var(--unit-scale, 100%);
 }
 
+/* Sheet prefix of references to other sheets ("S1::" in S1::L), wrapped
+   in \engisheet{...} (mathlib/units.py::wrap_sheet_prefix_latex()); the
+   MathJax macro in templates/index.html turns that into this class.
+   Size = the "Sheet prefix size" setting (--sheet-scale, set like
+   --unit-scale on .output-container). */
+.engi-sheet {
+  font-size: var(--sheet-scale, 50%);
+}
+
+/* The result table is only a wrapper for the print header (the sheet
+   name repeats on every printed page, see @media print): on screen it
+   must not exist as a box at all, so .output-container stays a direct
+   flex child of .output-wrap. */
+.print-frame,
+.print-frame > tbody,
+.print-frame > tbody > tr,
+.print-frame > tbody > tr > td {
+  display: contents;
+}
+
+.print-frame > thead,
+.print-sheets {
+  display: none;
+}
+
+/* --- Sheet bar (below the editor) --- */
+
+.sheet-bar {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px 10px;
+  min-height: 44px;
+}
+
+.sheet-tabs {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  overflow-x: auto;
+  min-width: 0;
+}
+
+.sheet-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex: 0 0 auto;
+  height: 28px;
+  padding: 0 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-header);
+  color: var(--text-secondary);
+  font-family: var(--font-sans);
+  font-size: 13px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.sheet-tab:hover {
+  background: var(--bg-hover);
+}
+
+.sheet-tab.is-active {
+  background: var(--bg-panel);
+  color: var(--text-primary);
+  border-color: var(--border-strong);
+  font-weight: 600;
+}
+
+.sheet-tab input {
+  width: 9ch;
+  min-width: 4ch;
+  height: 22px;
+  padding: 0 4px;
+  border: 1px solid var(--border-strong);
+  border-radius: 4px;
+  font-family: var(--font-sans);
+  font-size: 13px;
+}
+
+.sheet-tab input.is-invalid {
+  border-color: #c0392b;
+  background: #fdf0ee;
+}
+
+.sheet-tab-close {
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 14px;
+  line-height: 1;
+  padding: 0 0 0 2px;
+  cursor: pointer;
+}
+
+.sheet-tab-close:hover {
+  color: #c0392b;
+}
+
 .formula-block img {
   max-width: 100%;
   height: auto;
   border: 1px solid var(--border);
   border-radius: var(--radius);
   margin-top: 0.5em;
+}
+
+/* --- Pictures: picture("name") --- */
+
+.picture-wrap {
+  margin: 0.4em 0;
+}
+
+.picture-left { text-align: left; }
+.picture-center { text-align: center; }
+.picture-right { text-align: right; }
+
+/* Without width=: the picture's own size, but at most 500 px (and the
+   column). With width=: exactly that width (inline style), at most the column. */
+.formula-block img.engipad-picture {
+  display: inline-block;
+  max-width: min(500px, 100%);
+  height: auto;
+  border: none;
+  border-radius: 0;
+  margin: 0;
+}
+
+.formula-block img.engipad-picture.picture-sized {
+  max-width: 100%;
 }
 
 /* --- Responsive: Dropdown -> Boden-Sheet --- */
@@ -335,6 +472,10 @@ textarea:focus {
 }
 
 @media print {
+  .picture-wrap {
+    break-inside: avoid;
+  }
+
   html, body {
     height: auto !important;
     overflow: visible !important;
@@ -395,5 +536,86 @@ textarea:focus {
   .formula-block {
     page-break-inside: avoid;
     margin-bottom: 1em;
+  }
+
+  /* Sheet name as a header on every printed page: a table header row
+     repeats on each page the table spans (also in Firefox, unlike
+     @page margin boxes). Only shown when there is more than one sheet
+     (.is-empty otherwise). */
+  .sheet-bar {
+    display: none !important;
+  }
+
+  .print-frame {
+    display: table !important;
+    width: 100%;
+  }
+
+  .print-frame > thead,
+  .print-sheet > thead {
+    display: table-header-group !important;
+  }
+
+  .print-frame > tbody,
+  .print-sheet > tbody {
+    display: table-row-group !important;
+  }
+
+  .print-frame > tbody > tr,
+  .print-frame > thead > tr,
+  .print-sheet > tbody > tr,
+  .print-sheet > thead > tr {
+    display: table-row !important;
+  }
+
+  .print-frame > tbody > tr > td,
+  .print-frame > thead > tr > th,
+  .print-sheet > tbody > tr > td,
+  .print-sheet > thead > tr > th {
+    display: table-cell !important;
+  }
+
+  .print-frame > thead.is-empty {
+    display: none !important;
+  }
+
+  .print-frame th,
+  .print-sheet th {
+    text-align: left;
+    font-family: var(--font-sans);
+    font-size: 11pt;
+    font-weight: 600;
+    padding: 0 0 6px 0;
+    border-bottom: 1px solid #999999;
+  }
+
+  .print-frame td,
+  .print-sheet td {
+    padding: 0;
+  }
+
+  /* "Print/export all sheets": script adds body.print-all while printing. */
+  body.print-all .print-frame {
+    display: none !important;
+  }
+
+  body.print-all .print-sheets {
+    display: block !important;
+  }
+
+  .print-sheets {
+    white-space: normal;
+    width: 100%;
+    flex: 1 1 auto;
+  }
+
+  .print-sheet {
+    display: table !important;
+    width: 100%;
+  }
+
+  .print-sheet + .print-sheet {
+    break-before: page;
+    page-break-before: always;
   }
 }

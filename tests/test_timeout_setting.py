@@ -88,7 +88,7 @@ class TestTimeoutField:
 
 class TestRealTimeout:
     def test_set_timeout_really_applies_and_is_named_in_message(self, client, monkeypatch):
-        monkeypatch.setattr(app_module, "evaluate_code", _hang)  # sleeps 5 s
+        monkeypatch.setattr(app_module, "evaluate_workbook", _hang)  # sleeps 5 s
 
         start = time.time()
         response = client.post("/", data={"code": "a = 1\n", "timeout": "1"})
@@ -101,7 +101,7 @@ class TestRealTimeout:
 
     def test_no_increase_hint_at_the_maximum(self, client, monkeypatch):
         monkeypatch.setattr(app_module, "_TIMEOUT_MAX_SECONDS", 1)
-        monkeypatch.setattr(app_module, "evaluate_code", _hang)
+        monkeypatch.setattr(app_module, "evaluate_workbook", _hang)
 
         response = client.post("/export/latex", data={"code": "a = 1\n", "timeout": "5"})
         assert b"longer than 1s" in response.data

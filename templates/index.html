@@ -20,12 +20,16 @@
       tex: {
         inlineMath: [['$', '$'], ['\\(', '\\)']],
         packages: {'[+]': ['html', 'textmacros', 'unicode']},
+        // Sheet prefixes ("S1::" of S1::L) are emitted as \engisheet{...}
+        // (mathlib/units.py::wrap_sheet_prefix_latex()), sized by the
+        // "Sheet prefix size" setting (static/main.css, .engi-sheet).
         // Units are emitted as \engiunit{...} by the Python side
         // (mathlib/units.py::wrap_unit_latex()); the size is set in
         // static/main.css (.engi-unit), driven by the "Unit font size" setting.
         // The Jinja raw block around the macros line is needed: the
         // character pair brace+hash would otherwise start a Jinja comment.
         macros: {% raw %}{engiunit: ['\\class{engi-unit}{#1}', 1],
+                 engisheet: ['\\class{engi-sheet}{#1}', 1],
                  textbackslash: '$\\unicode{x5C}$',
                  textasciicircum: '$\\unicode{x5E}$',
                  textasciitilde: '$\\unicode{x7E}$'}{% endraw %}
@@ -42,9 +46,26 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 
-  <link rel="stylesheet" href="{{ url_for('static', filename='main.css') }}?v=7">
+  <link rel="stylesheet" href="{{ url_for('static', filename='main.css') }}?v=9">
 </head>
 <body>
+  {% macro render_blocks(blocks) %}
+    {% for block in blocks %}
+      <div class="formula-block">
+        {% for item in block %}
+          {% if item.type == 'latex' %}
+            <div>$$ {{ item.content | safe }} $$</div>
+          {% elif item.type == 'plot' %}
+            <div><img src="{{ item.src }}" alt="Plot"></div>
+          {% elif item.type == 'image' %}
+            <div class="picture-wrap picture-{{ item.align }}"><img class="engipad-picture{% if item.width %} picture-sized{% endif %}" data-name="{{ item.name }}" alt="{{ item.name }}" src="data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw=="{% if item.width %} style="width: {{ item.width }}px;"{% endif %}></div>
+          {% elif item.type == 'spacer' %}
+            <div style="height: 1.5em;"></div>
+          {% endif %}
+        {% endfor %}
+      </div>
+    {% endfor %}
+  {% endmacro %}
   <div class="app">
 
     <!-- ===================== INPUT ===================== -->
@@ -57,6 +78,11 @@
 
           <button type="button" class="tool-btn" data-icon="open" title="Open file" onclick="document.getElementById('file-input').click();"></button>
           <button type="button" class="tool-btn" data-icon="save" title="Save" onclick="saveFile();"></button>
+
+          <span class="tool-divider"></span>
+
+          <button type="button" class="tool-btn" id="undo-btn" data-icon="undo" title="Undo (Ctrl+Z)" disabled></button>
+          <button type="button" class="tool-btn" id="redo-btn" data-icon="redo" title="Redo (Ctrl+Y)" disabled></button>
 
           <span class="tool-divider"></span>
 
@@ -184,6 +210,9 @@
             </div>
           </div>
 
+          <input type="file" id="image-input" accept="image/png" style="display:none" />
+          <button type="button" class="tool-btn" id="image-btn" data-icon="image_plus" title="Insert image (PNG)"></button>
+
           <div class="dropdown" data-dropdown>
             <button type="button" class="tool-btn" data-icon="settings" title="Settings" data-trigger></button>
             <div class="dropdown-panel" data-panel>
@@ -209,11 +238,40 @@
                   <span class="setting-suffix">%</span>
                 </span>
               </label>
+              <label class="setting-row" for="sheetfontsize-input" title="Size of the sheet name in references to other sheets (S1::L)">
+                <span>Sheet prefix size</span>
+                <span class="setting-control">
+                  <input type="text" inputmode="numeric" id="sheetfontsize-input" name="sheet_font_size" form="calc-form" value="{{ sheet_font_size }}">
+                  <span class="setting-suffix">%</span>
+                </span>
+              </label>
+              <label class="setting-row" for="all-sheets-toggle" title="Off: print and LaTeX export contain the sheet that is shown. On: all sheets, each starting on a new page.">
+                <span>Print/export all sheets</span>
+                <span class="setting-control">
+                  <input type="checkbox" id="all-sheets-toggle" name="all_sheets" value="1" form="calc-form"{% if all_sheets %} checked{% endif %} style="width: 16px; height: 16px;">
+                </span>
+              </label>
               <label class="setting-row" for="timeout-input" title="Maximum computation time (1-30 s)">
                 <span>Timeout</span>
                 <span class="setting-control">
                   <input type="text" inputmode="numeric" id="timeout-input" name="timeout" form="calc-form" value="{{ timeout }}">
                   <span class="setting-suffix">s</span>
+                </span>
+              </label>
+              <label class="setting-row" for="image-limit-select" title="Total size of all images in the file (1-3 MB). A single image may use a fifth of it.">
+                <span>Image limit</span>
+                <span class="setting-control">
+                  <select id="image-limit-select" name="image_limit" form="calc-form">
+                    {% for mb in image_limit_choices %}
+                    <option value="{{ mb }}"{% if mb == image_limit_mb %} selected{% endif %}>{{ mb }} MB</option>
+                    {% endfor %}
+                  </select>
+                </span>
+              </label>
+              <label class="setting-row" for="live-update-toggle" title="Off: results update only with the Calculate button (or Ctrl+Enter). On: results update after every Enter.">
+                <span>Live update (on Enter)</span>
+                <span class="setting-control">
+                  <input type="checkbox" id="live-update-toggle" data-default="{{ 1 if live_default else 0 }}" style="width: 16px; height: 16px;">
                 </span>
               </label>
             </div>
@@ -226,8 +284,21 @@
       </header>
 
       <form method="post" id="calc-form" class="editor-wrap" style="font-size: {{ font_size_px }}px;">
-        <textarea id="code-textarea" name="code" spellcheck="false">{{ code }}</textarea>
+        <!-- The textarea shows ONE sheet (static/editor.js); the whole
+             workbook (all sheets as one text) travels in the hidden field. -->
+        <textarea id="code-textarea" spellcheck="false" data-active="{{ active_sheet }}">{{ code }}</textarea>
+        <input type="hidden" name="code" id="workbook-field" value="">
+        <input type="hidden" name="active_sheet" id="active-sheet-field" value="{{ active_sheet }}">
+        <!-- Names of the loaded images (the images themselves stay in the
+             browser); "images" (Base64 data) is only filled for the LaTeX export. -->
+        <input type="hidden" name="image_names" id="image-names-field" value="">
+        <input type="hidden" name="images" id="export-images-field" value="">
       </form>
+
+      <div class="sheet-bar" id="sheet-bar">
+        <button type="button" class="tool-btn" id="new-sheet-btn" data-icon="new_sheet" title="New sheet"></button>
+        <div class="sheet-tabs" id="sheet-tabs"></div>
+      </div>
     </section>
 
     <!-- ===================== RESULT ===================== -->
@@ -237,14 +308,14 @@
 
         <div class="toolbar">
           <button type="button" class="tool-btn" data-icon="print" title="Print / save as PDF" onclick="window.print();"></button>
-          <button type="submit" form="calc-form" formaction="/export/latex" class="tool-btn" data-icon="export" title="LaTeX export (.tex, or .zip if it includes plots)"></button>
+          <button type="submit" form="calc-form" formaction="/export/latex" class="tool-btn" data-icon="export" title="LaTeX export (.tex, or .zip if it includes plots or images)"></button>
 
           <div class="dropdown" data-dropdown>
             <button type="button" class="tool-btn" data-icon="info" title="Info" data-trigger></button>
             <div class="dropdown-panel" data-panel>
               <p class="panel-title">EngiPad</p>
               <dl class="info-list">
-                <dt>Version</dt><dd>1.1.4</dd>
+                <dt>Version</dt><dd>1.1.5</dd>
                 <dt>Author</dt><dd>Prof. Dr. Peter Stein</dd>
                 <dt>Built with</dt><dd>Python, Flask, SymPy</dd>
                 <dt>Coding</dt><dd>Claude Sonnet 5</dd>
@@ -259,19 +330,25 @@
       </header>
 
       <div class="output-wrap">
-        <div class="output-container" style="font-size: {{ font_size_px }}px; --unit-scale: {{ unit_font_size_pct }}%;">
-          {% for block in results %}
-            <div class="formula-block">
-              {% for item in block %}
-                {% if item.type == 'latex' %}
-                  <div>$$ {{ item.content | safe }} $$</div>
-                {% elif item.type == 'plot' %}
-                  <div><img src="{{ item.src }}" alt="Plot"></div>
-                {% elif item.type == 'spacer' %}
-                  <div style="height: 1.5em;"></div>
-                {% endif %}
-              {% endfor %}
+        <!-- print-frame: on screen invisible wrapper (display: contents);
+             when printing, its header row (the sheet name) repeats on every page. -->
+        <table class="print-frame">
+          <thead class="print-head{% if not sheet_names %} is-empty{% endif %}"><tr><th id="print-sheet-title">{{ active_sheet }}</th></tr></thead>
+          <tbody><tr><td>
+            <div class="output-container" style="font-size: {{ font_size_px }}px; --unit-scale: {{ unit_font_size_pct }}%; --sheet-scale: {{ sheet_font_size_pct }}%;">
+              {{ render_blocks(results) }}
             </div>
+          </td></tr></tbody>
+        </table>
+
+        <!-- Only used for printing ALL sheets; typeset on demand
+             (tex2jax_ignore keeps MathJax from doing it up front). -->
+        <div class="print-sheets tex2jax_ignore" id="print-sheets" style="font-size: {{ font_size_px }}px; --unit-scale: {{ unit_font_size_pct }}%; --sheet-scale: {{ sheet_font_size_pct }}%;">
+          {% for sheet_name, sheet_results in all_results %}
+            <table class="print-sheet">
+              <thead><tr><th>{{ sheet_name }}</th></tr></thead>
+              <tbody><tr><td>{{ render_blocks(sheet_results) }}</td></tr></tbody>
+            </table>
           {% endfor %}
         </div>
       </div>
@@ -279,6 +356,8 @@
 
   </div>
 
-  <script src="{{ url_for('static', filename='editor.js') }}"></script>
+  <script>window.ENGIPAD_IMAGES = {{ image_config | tojson }};</script>
+  <script src="{{ url_for('static', filename='pictures.js') }}?v=1"></script>
+  <script src="{{ url_for('static', filename='editor.js') }}?v=3"></script>
 </body>
 </html>

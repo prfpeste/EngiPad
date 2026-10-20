@@ -199,8 +199,9 @@ class TestFontSizeFieldRoundTrip:
         response = client.post("/", data={"code": "a = 1\n", "font_size": "22"})
         html = response.get_data(as_text=True)
         assert 'id="calc-form"' in html
-        # Both containers carry the same font-size inline style.
-        assert html.count("font-size: 22px;") == 2
+        # The form, the result container and the (hidden) print area for
+        # "print all sheets" carry the same font-size inline style.
+        assert html.count("font-size: 22px;") == 3
 
 
 # ---------------------------------------------------------------------

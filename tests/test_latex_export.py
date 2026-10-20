@@ -39,7 +39,9 @@ class TestBuildLatexDocument:
     def test_default_unit_size_is_a_plain_pass_through(self):
         # 100%: same size as the text -- no needless \scalebox box
         # around every unit.
-        tex, _ = build_latex_document([])
+        # (sheet_scale=1 as well: the sheet-prefix macro has its own
+        # \scalebox at its default size of 50%.)
+        tex, _ = build_latex_document([], sheet_scale=1)
         assert r"\newcommand{\engiunit}[1]{#1}" in tex
         assert r"\scalebox" not in tex
 

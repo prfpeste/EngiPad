@@ -214,7 +214,7 @@ UNIT_VALUES = tuple(
 
 GREEK_VARS = {
     "α": r"\alpha", "β": r"\beta", "γ": r"\gamma", "δ": r"\delta",
-    "ε": r"\epsilon", "ζ": r"\zeta", "η": r"\eta", "θ": r"\vartheta",
+    "ε": r"\varepsilon", "ζ": r"\zeta", "η": r"\eta", "θ": r"\vartheta",
     "ι": r"\iota", "κ": r"\kappa", "λ": r"\lambda", "μ": r"\mu",
     "ν": r"\nu", "ξ": r"\xi", "π": r"\pi", "ρ": r"\rho",
     "σ": r"\sigma", "τ": r"\tau", "υ": r"\upsilon", "φ": r"\varphi",
@@ -293,6 +293,8 @@ PRETTY_UNITS = (
     (W / (m**2), r"\frac{\mathrm{W}}{\mathrm{m}^{2}}"),
     (W / m, r"\frac{\mathrm{W}}{\mathrm{m}}"),
 
+    (1000 * J / K, r"\frac{\mathrm{kJ}}{\mathrm{K}}"),
+    (J / K, r"\frac{\mathrm{J}}{\mathrm{K}}"),
     (1000 * J / (kg * K), r"\frac{\mathrm{kJ}}{\mathrm{kg}\,\mathrm{K}}"),
     (J / (kg * K), r"\frac{\mathrm{J}}{\mathrm{kg}\,\mathrm{K}}"),
     (1000 * J / mol, r"\frac{\mathrm{kJ}}{\mathrm{mol}}"),
@@ -614,6 +616,11 @@ def check_addition_dimensions(left, right):
     dimensions survive as a multi-term Add.
     """
     if not (has_only_units_and_numbers(left) and has_only_units_and_numbers(right)):
+        return
+
+    # An exact zero is dimension-neutral: SymPy collapses "0 * unit" to a
+    # plain 0 (the unit falls out), and 0 + 15'm is physically fine.
+    if left == 0 or right == 0:
         return
 
     dim_left = SI.get_dimensional_expr(left)
@@ -987,9 +994,25 @@ _ACCENT_RE = re.compile(
 )
 
 
+def wrap_sheet_prefix_latex(sheet_name: str) -> str:
+    r"""LaTeX of the sheet prefix of a sheet reference ("S1::" in
+    "S1::L"), wrapped in the \engisheet{...} marker macro so it can be
+    shown smaller than the variable behind it (the "Sheet prefix size"
+    setting). Like \engiunit, the macro is defined where the LaTeX is
+    finally rendered: templates/index.html (MathJax) and
+    core/latex_export.py (.tex).
+    """
+    safe = sheet_name.replace("_", r"\_")
+    return rf"\engisheet{{\mathrm{{{safe}}}{{::}}}}"
+
+
 def var_to_latex(var_name: str) -> str:
     if var_name.startswith(VAR_SYMBOL_PREFIX):
         var_name = var_name[len(VAR_SYMBOL_PREFIX):]
+
+    if "::" in var_name:
+        sheet_name, _, rest = var_name.partition("::")
+        return wrap_sheet_prefix_latex(sheet_name) + var_to_latex(rest)
 
     var_name = normalize_identifiers(var_name)
 
@@ -1069,6 +1092,27 @@ def make_safe_text_latex(text: str) -> str:
     return "".join(_LATEX_TEXT_ESCAPES.get(ch, ch) for ch in text)
 
 
+_SPACE_RUN_RE = re.compile(r" {2,}|^ | $")
+
+
+def text_to_latex(text: str, command: str = "text") -> str:
+    """Wraps plain text in \\text{...} (or \\textbf{...}) AND keeps
+    runs of spaces: inside \\text MathJax (and LaTeX) collapse several
+    spaces to one, and leading/trailing spaces vanish. Each space of
+    such a run is therefore emitted as a math-mode "\\ " between two
+    \\text pieces, which both MathJax and pdflatex render at full width.
+    """
+    pieces = []
+    pos = 0
+    for match in _SPACE_RUN_RE.finditer(text):
+        if match.start() > pos:
+            pieces.append(rf"\{command}{{{make_safe_text_latex(text[pos:match.start()])}}}")
+        pieces.append(r"\ " * len(match.group()))
+        pos = match.end()
+    if pos < len(text) or not pieces:
+        pieces.append(rf"\{command}{{{make_safe_text_latex(text[pos:])}}}")
+    return "".join(pieces)
+
+
 def error_to_latex(prefix: str, exc: Exception) -> str:
-    safe = make_safe_text_latex(f"{prefix} -- {exc}")
-    return rf"\text{{{safe}}}"
+    return text_to_latex(f"{prefix} -- {exc}")

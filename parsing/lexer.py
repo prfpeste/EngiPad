@@ -7,6 +7,9 @@ Scope:
     units like "kg", "m" as well as compound units like "m^2/s" --
     see parsing/parser.py for the full unit grammar).
 
+"::" (sheet reference "Sheet::variable") is one token of its own; a
+single ":" is still rejected.
+
 Deliberately NOT included: ";" separators, ":=", "|unit". These
 characters raise a ValueError here, so callers (core/formatter.py) can
 cleanly fall back to a plain-text renderer for anything outside this
@@ -32,6 +35,7 @@ LBRACKET = "LBRACKET"
 RBRACKET = "RBRACKET"
 COMMA = "COMMA"
 APOSTROPHE = "APOSTROPHE"
+DCOLON = "DCOLON"  # "::" -- sheet reference, e.g. S1::L
 EOF = "EOF"
 
 _SINGLE_CHAR_TOKENS = {
@@ -102,6 +106,11 @@ def tokenize(text: str) -> list[Token]:
                 i += 1
 
             tokens.append(Token(IDENT, text[start:i], start))
+            continue
+
+        if ch == ":" and text[i + 1:i + 2] == ":":
+            tokens.append(Token(DCOLON, "::", i))
+            i += 2
             continue
 
         if ch in _SINGLE_CHAR_TOKENS:
