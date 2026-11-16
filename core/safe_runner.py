@@ -15,16 +15,23 @@ server itself, not just the individual response.
 from __future__ import annotations
 
 import multiprocessing as mp
+from multiprocessing.connection import wait
 
 DEFAULT_TIMEOUT_SECONDS = 10
 
 
-def _worker(queue: mp.Queue, func, args: tuple, kwargs: dict) -> None:
+def _worker(conn, func, args: tuple, kwargs: dict) -> None:
     try:
-        result = func(*args, **kwargs)
-        queue.put(("ok", result))
-    except Exception as exc:  # noqa: BLE001 -- error text is passed through
-        queue.put(("error", str(exc)))
+        try:
+            message = ("ok", func(*args, **kwargs))
+        except Exception as exc:  # noqa: BLE001 -- error text is passed through
+            message = ("error", str(exc))
+        try:
+            conn.send(message)
+        except Exception as exc:  # noqa: BLE001 -- e.g. result not picklable
+            conn.send(("error", f"Result could not be returned: {exc}"))
+    finally:
+        conn.close()
 
 
 def run_with_timeout(func, args: tuple = (), kwargs: dict | None = None,
@@ -40,25 +47,51 @@ def run_with_timeout(func, args: tuple = (), kwargs: dict | None = None,
     func AND its arguments/return value must be picklable (true for
     core.engine.evaluate_code(): only strings/numbers/lists/dicts, no
     SymPy objects in the return value).
+
+    The result is READ while the child is still running, and only then
+    the child is joined. The other order (join first, read afterwards)
+    blocks for any result larger than the pipe buffer (about 64 KB on
+    Linux): the child cannot finish writing before somebody reads, so it
+    never exits and the caller reports a timeout although the
+    computation was done long ago -- that is what happened with three or
+    more plots in one sheet.
     """
     kwargs = kwargs or {}
-    queue: mp.Queue = mp.Queue()
-    process = mp.Process(target=_worker, args=(queue, func, args, kwargs))
+    receiver, sender = mp.Pipe(duplex=False)
+    process = mp.Process(target=_worker, args=(sender, func, args, kwargs))
     process.start()
-    process.join(timeout)
+    # Only the child writes; without closing our copy, a dead child would
+    # not be noticed as "end of data".
+    sender.close()
 
-    if process.is_alive():
-        process.terminate()
-        process.join(2)
+    try:
+        # Wakes up when a result is there, when the child died, or after
+        # the timeout -- whichever comes first.
+        wait([receiver, process.sentinel], timeout)
+
+        if receiver.poll():
+            try:
+                result = receiver.recv()
+            except (EOFError, OSError):
+                result = None
+            except Exception as exc:  # noqa: BLE001 -- broken pickle etc.
+                result = ("error", f"Result could not be read: {exc}")
+            if result is not None:
+                process.join(2)
+                return result
+
         if process.is_alive():
-            process.kill()
-            process.join()
-        return "timeout", None
+            return "timeout", None
 
-    if not queue.empty():
-        return queue.get()
-
-    # Process ended without writing anything to the queue (e.g. an
-    # OOM-kill or a crash inside a C extension) -- treat this as a clear
-    # error instead of surfacing a cryptic exception.
-    return "error", "Computation ended unexpectedly (e.g. memory limit)."
+        # Process ended without sending anything (e.g. an OOM-kill or a
+        # crash inside a C extension) -- treat this as a clear error
+        # instead of surfacing a cryptic exception.
+        return "error", "Computation ended unexpectedly (e.g. memory limit)."
+    finally:
+        if process.is_alive():
+            process.terminate()
+            process.join(2)
+            if process.is_alive():
+                process.kill()
+                process.join()
+        receiver.close()

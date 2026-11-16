@@ -3,12 +3,13 @@
 Builds an AST (parsing.ast_nodes) from the token list produced by
 parsing.lexer. Classic precedence hierarchy (low -> high):
 
+    expr       : additive (COMPARE additive)?   # < > <= >= == !=
     additive   : term (("+" | "-") term)*
     term       : quantity (("*" | "/") quantity)*
     quantity   : unary ("'" unit_expr)?
     unary      : ("+" | "-") unary | power
     power      : postfix ("^" unary)?        # right-associative
-    postfix    : primary ("[" additive "]")*  # e.g. sol[0], M[1][2]
+    postfix    : primary ("[" expr ("," expr)* "]")*   # sol[1], M[1][2], M[1, 2]
     primary    : NUMBER
                | IDENT "::" IDENT              # sheet reference S1::L
                | IDENT ("(" (expr ("," expr)*)? ")")?
@@ -53,6 +54,7 @@ from __future__ import annotations
 from mathlib.units import UNIT_NAME_SET
 from parsing.ast_nodes import (
     BinaryOp,
+    Comparison,
     FunctionCall,
     Identifier,
     ListLiteral,
@@ -67,6 +69,7 @@ from parsing.lexer import (
     APOSTROPHE,
     CARET,
     COMMA,
+    COMPARE,
     DCOLON,
     EOF,
     IDENT,
@@ -114,6 +117,26 @@ class Parser:
         return self._advance()
 
     # --- Precedence levels, low (weak) to high (strong) ---
+
+    def parse_expr(self) -> Node:
+        # Weakest level: one optional comparison. Used wherever a whole
+        # expression is expected (top level, function arguments,
+        # parentheses, list items).
+        node = self.parse_additive()
+
+        if self._peek().type == COMPARE:
+            op_tok = self._advance()
+            right = self.parse_additive()
+
+            if self._peek().type == COMPARE:
+                raise ValueError(
+                    "Chained comparisons like a < b < c are not supported; "
+                    "write two comparisons."
+                )
+
+            node = Comparison(op_tok.value, node, right)
+
+        return node
 
     def parse_additive(self) -> Node:
         node = self.parse_term()
@@ -191,7 +214,18 @@ class Parser:
         # number.
         lookahead_pos = self._pos + 1
         lookahead = self._tokens[lookahead_pos] if lookahead_pos < len(self._tokens) else self._tokens[-1]
-        return lookahead.type in (IDENT, LPAREN)
+        if lookahead.type == IDENT:
+            return True
+        if lookahead.type != LPAREN:
+            return False
+        # "(" continues the unit only if a unit can start inside it:
+        # "W/(m*K)" yes, but "2'kg*(0.1'm)^2" is a new factor in
+        # parentheses (it used to fail with "Unexpected token NUMBER in
+        # unit expression").
+        pos = lookahead_pos + 1
+        while pos < len(self._tokens) and self._tokens[pos].type == LPAREN:
+            pos += 1
+        return pos < len(self._tokens) and self._tokens[pos].type == IDENT
 
     def parse_unit_power(self) -> Node:
         base = self.parse_unit_primary()
@@ -269,9 +303,12 @@ class Parser:
 
         while self._peek().type == LBRACKET:
             self._advance()
-            index = self.parse_additive()
+            node = Subscript(node, self.parse_expr())
+            while self._peek().type == COMMA:
+                # "M[i, j]" is the same as "M[i][j]".
+                self._advance()
+                node = Subscript(node, self.parse_expr())
             self._expect(RBRACKET)
-            node = Subscript(node, index)
 
         return node
 
@@ -302,7 +339,7 @@ class Parser:
 
         if tok.type == LPAREN:
             self._advance()
-            first = self.parse_additive()
+            first = self.parse_expr()
 
             if self._peek().type == COMMA:
                 # Parenthesized comma list, e.g. "(i, 1, 5)" in
@@ -315,7 +352,7 @@ class Parser:
                 items = [first]
                 while self._peek().type == COMMA:
                     self._advance()
-                    items.append(self.parse_additive())
+                    items.append(self.parse_expr())
                 self._expect(RPAREN)
                 return ListLiteral(tuple(items))
 
@@ -337,11 +374,11 @@ class Parser:
         items: list[Node] = []
 
         if self._peek().type != RBRACKET:
-            items.append(self.parse_additive())
+            items.append(self.parse_expr())
 
             while self._peek().type == COMMA:
                 self._advance()
-                items.append(self.parse_additive())
+                items.append(self.parse_expr())
 
         self._expect(RBRACKET)
         return ListLiteral(tuple(items))
@@ -352,11 +389,11 @@ class Parser:
         if self._peek().type == RPAREN:
             return args
 
-        args.append(self.parse_additive())
+        args.append(self.parse_expr())
 
         while self._peek().type == COMMA:
             self._advance()
-            args.append(self.parse_additive())
+            args.append(self.parse_expr())
 
         return args
 
@@ -369,7 +406,7 @@ def parse(text: str) -> Node:
 
     tokens = tokenize(text)
     parser = Parser(tokens)
-    node = parser.parse_additive()
+    node = parser.parse_expr()
 
     trailing = parser._peek()
     if trailing.type != EOF:

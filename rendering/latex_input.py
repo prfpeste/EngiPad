@@ -14,10 +14,12 @@ from __future__ import annotations
 
 from mathlib.units import UNIT_DISPLAY_OVERRIDES, var_to_latex, wrap_unit_latex
 from parsing.ast_nodes import (
-    BinaryOp, FunctionCall, Identifier, Node, Number, Quantity, SheetRef, Subscript, UnaryOp,
+    BinaryOp, Comparison, FunctionCall, Identifier, ListLiteral, Node, Number, Quantity,
+    SheetRef, Subscript, UnaryOp,
 )
 
 # Precedence levels, identical to the grammar in parsing/parser.py.
+_COMPARISON_PREC = 0
 _ADDITIVE_PREC = 1
 _MULTIPLICATIVE_PREC = 2
 _UNARY_PREC = 3
@@ -43,6 +45,15 @@ _LATEX_FUNCTION_NAMES = {
     # function names "re"/"im" the user actually types.
     "re": r"\operatorname{Re}",
     "im": r"\operatorname{Im}",
+    "min": r"\min", "max": r"\max",
+    "erf": r"\operatorname{erf}", "erfc": r"\operatorname{erfc}",
+    "sign": r"\operatorname{sgn}",
+}
+
+_BESSEL_SYMBOLS = {"besselj": "J", "bessely": "Y", "besseli": "I", "besselk": "K"}
+
+COMPARISON_LATEX = {
+    "<": "<", ">": ">", "<=": r"\le", ">=": r"\ge", "==": "=", "!=": r"\ne",
 }
 
 # Known constants that SymPy prints as plain identifiers in str(expr)
@@ -79,7 +90,14 @@ def to_latex(node: Node, known_vars: frozenset[str] = frozenset()) -> str:
 
 def _render(node: Node, parent_prec: int, known_vars: frozenset[str]) -> str:
     if isinstance(node, Number):
-        return node.value
+        mantissa, e, exponent = node.value.replace("E", "e").partition("e")
+        if not e:
+            return node.value
+        # "1.5e-3" is shown like the typed-out "1.5*10^-3". It is a
+        # product, so it needs the parentheses of one (e.g. as the base
+        # of a power).
+        text = rf"{mantissa} \cdot 10^{{{int(exponent)}}}"
+        return _wrap_if_needed(text, _MULTIPLICATIVE_PREC, parent_prec)
 
     if isinstance(node, Identifier):
         if node.name in _IDENTIFIER_LATEX_OVERRIDES and node.name not in known_vars:
@@ -105,6 +123,19 @@ def _render(node: Node, parent_prec: int, known_vars: frozenset[str]) -> str:
 
     if isinstance(node, BinaryOp):
         return _render_binary_op(node, parent_prec, known_vars)
+
+    if isinstance(node, ListLiteral):
+        # "[1, 2, 3]" / "(x, 0, 5)" as an argument, e.g. of solve() or
+        # nsolve(). (A matrix typed as mat([[..], [..]]) is drawn as a
+        # matrix, see _render_function_call().)
+        items = ", ".join(_render(item, 0, known_vars) for item in node.items)
+        return rf"\left[{items}\right]"
+
+    if isinstance(node, Comparison):
+        left = _render(node.left, _ADDITIVE_PREC, known_vars)
+        right = _render(node.right, _ADDITIVE_PREC, known_vars)
+        text = f"{left} {COMPARISON_LATEX[node.op]} {right}"
+        return _wrap_if_needed(text, _COMPARISON_PREC, parent_prec)
 
     raise TypeError(f"Unknown AST node type: {type(node).__name__}")
 
@@ -263,10 +294,61 @@ def _render_function_call(node: FunctionCall, parent_prec: int, known_vars: froz
         text = f"e^{{{exponent}}}"
         return _wrap_if_needed(text, _POWER_PREC, parent_prec)
 
+    if (
+        node.name == "nintegrate" and len(node.args) == 2
+        and isinstance(node.args[1], ListLiteral) and len(node.args[1].items) == 3
+    ):
+        # nintegrate(f, (x, a, b)) like a handwritten definite integral.
+        variable, lower, upper = (_render(item, 0, known_vars) for item in node.args[1].items)
+        integrand = _render(node.args[0], _MULTIPLICATIVE_PREC, known_vars)
+        text = rf"\int_{{{lower}}}^{{{upper}}} {integrand}\,\mathrm{{d}}{variable}"
+        return _wrap_if_needed(text, _ADDITIVE_PREC, parent_prec)
+
+    if node.name in ("mat", "Matrix") and len(node.args) == 1 and isinstance(node.args[0], ListLiteral):
+        # mat([[1, 2], [3, 4]]) is drawn as the matrix it is; a flat
+        # list mat([1, 2, 3]) is a column, as SymPy builds it.
+        rows = node.args[0].items
+        if rows and all(isinstance(row, ListLiteral) for row in rows):
+            lines = [" & ".join(_render(cell, 0, known_vars) for cell in row.items) for row in rows]
+        else:
+            lines = [_render(cell, 0, known_vars) for cell in rows]
+        body = r"\\".join(lines)
+        return rf"\left[\begin{{matrix}}{body}\end{{matrix}}\right]"
+
+    if node.name in ("prop", "haprop"):
+        # The fluid is a name, not a variable: upright ("Water").
+        rendered = [_render(arg, 0, known_vars) for arg in node.args]
+        if node.name == "prop" and len(node.args) == 6 and isinstance(node.args[5], Identifier):
+            rendered[5] = rf"\mathrm{{{node.args[5].name}}}"
+        return rf"\operatorname{{{node.name}}}\left({', '.join(rendered)}\right)"
+
     args_latex = ", ".join(_render(arg, 0, known_vars) for arg in node.args)
+
+    if node.name == "abs" and len(node.args) == 1:
+        # |x| like in a handwritten formula (the result side already
+        # looks like this: SymPy prints Abs() with bars too).
+        return rf"\left|{args_latex}\right|"
 
     if node.name == "sqrt" and len(node.args) == 1:
         return rf"\sqrt{{{args_latex}}}"
+
+    if node.name in _BESSEL_SYMBOLS and len(node.args) == 2:
+        # besselj(n, x) as J_n(x), like in the textbooks.
+        order = _render(node.args[0], 0, known_vars)
+        argument = _render(node.args[1], 0, known_vars)
+        return rf"{_BESSEL_SYMBOLS[node.name]}_{{{order}}}\left({argument}\right)"
+
+    if node.name == "floor" and len(node.args) == 1:
+        return rf"\left\lfloor {args_latex} \right\rfloor"
+
+    if node.name == "ceil" and len(node.args) == 1:
+        return rf"\left\lceil {args_latex} \right\rceil"
+
+    if f"{node.name}()" in known_vars:
+        # A function the user defined ("f(x) = ..."): italic like a
+        # variable, f(x), not upright like a built-in operator name.
+        # core/context.py::known_names() lists functions as "name()".
+        return rf"{var_to_latex(node.name)}\left({args_latex}\right)"
 
     if node.name in _LATEX_FUNCTION_NAMES:
         return rf"{_LATEX_FUNCTION_NAMES[node.name]}\left({args_latex}\right)"

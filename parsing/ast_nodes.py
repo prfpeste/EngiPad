@@ -53,6 +53,20 @@ class BinaryOp:
 
 
 @dataclass(frozen=True)
+class Comparison:
+    """A comparison, e.g. a < b or sigma <= sigma_zul.
+
+    op is one of "<", ">", "<=", ">=", "==", "!=" (the lexer maps the
+    single characters ≤ ≥ ≠ to these). The weakest-binding level of
+    the grammar; not chainable ("a < b < c" is a syntax error).
+    """
+
+    op: str
+    left: "Node"
+    right: "Node"
+
+
+@dataclass(frozen=True)
 class FunctionCall:
     """Function call with any number of arguments, e.g. sin(x)."""
 
@@ -126,4 +140,4 @@ class Subscript:
 
 
 # Union type for type annotations elsewhere (parser, renderer).
-Node = Union[Number, Identifier, SheetRef, UnaryOp, BinaryOp, FunctionCall, Quantity, ListLiteral, Subscript]
+Node = Union[Number, Identifier, SheetRef, UnaryOp, BinaryOp, Comparison, FunctionCall, Quantity, ListLiteral, Subscript]

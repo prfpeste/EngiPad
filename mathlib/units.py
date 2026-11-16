@@ -316,13 +316,42 @@ PRETTY_UNITS = (
 
     *_GENERATED_PRETTY,
 
+    # --- Compound units that results often have (13.11.2026). At the
+    # END on purpose: the first matching entry wins, so none of these
+    # changes how a unit was displayed before -- they only replace the
+    # generic base-unit display ("kg/s^2") by the usual name ("N/m").
+    (N / m, r"\frac{\mathrm{N}}{\mathrm{m}}"),                      # line load, spring rate
+    (N / m**3, r"\frac{\mathrm{N}}{\mathrm{m}^{3}}"),                # specific weight
+    (N * s, r"\mathrm{N}\,\mathrm{s}"),                             # momentum
+    (Pa * s, r"\mathrm{Pa}\,\mathrm{s}"),                           # dynamic viscosity
+    (kg / m**3, r"\frac{\mathrm{kg}}{\mathrm{m}^{3}}"),              # density
+    (kg / m**2, r"\frac{\mathrm{kg}}{\mathrm{m}^{2}}"),
+    (kg / m, r"\frac{\mathrm{kg}}{\mathrm{m}}"),
+    (kg / s, r"\frac{\mathrm{kg}}{\mathrm{s}}"),                     # mass flow
+    (kg / (m**2 * s), r"\frac{\mathrm{kg}}{\mathrm{m}^{2}\,\mathrm{s}}"),
+    (kg * m**2, r"\mathrm{kg}\,\mathrm{m}^{2}"),                     # moment of inertia
+    (m**3 / s, r"\frac{\mathrm{m}^{3}}{\mathrm{s}}"),                # volume flow
+    (m**3 / kg, r"\frac{\mathrm{m}^{3}}{\mathrm{kg}}"),              # specific volume
+    (m / s, r"\frac{\mathrm{m}}{\mathrm{s}}"),
+    (m / s**2, r"\frac{\mathrm{m}}{\mathrm{s}^{2}}"),
+    (m**4, r"\mathrm{m}^{4}"),                                      # second moment of area
+    (1 / m, r"\frac{1}{\mathrm{m}}"),
+    (1 / K, r"\frac{1}{\mathrm{K}}"),                                # expansion coefficient
+    (K / W, r"\frac{\mathrm{K}}{\mathrm{W}}"),                       # thermal resistance
+    (m**2 * K / W, r"\frac{\mathrm{m}^{2}\,\mathrm{K}}{\mathrm{W}}"),
+    (W / K, r"\frac{\mathrm{W}}{\mathrm{K}}"),
+    (W / m**3, r"\frac{\mathrm{W}}{\mathrm{m}^{3}}"),                # heat source density
+    (mol / m**3, r"\frac{\mathrm{mol}}{\mathrm{m}^{3}}"),
+    (J / (mol * K), r"\frac{\mathrm{J}}{\mathrm{mol}\,\mathrm{K}}"),  # gas constant
+    (kg / mol, r"\frac{\mathrm{kg}}{\mathrm{mol}}"),
+
     (sp.pi / 180, r"^\circ"),
     (1, r""),
 )
 
 
 
-_BARE_LITERAL_UNIT_RE = re.compile(r"[-+]?\d+(\.\d+)?'(?P<unit>.+)$")
+_BARE_LITERAL_UNIT_RE = re.compile(r"[-+]?\d+(\.\d+)?([eE][-+]?\d+)?'(?P<unit>.+)$")
 
 
 def bare_literal_unit_key(raw_expr) -> str | None:
@@ -348,6 +377,9 @@ def bare_literal_unit_key(raw_expr) -> str | None:
 
 
 DESIRED_UNIT_MAP = {
+    # Percent: only as a display target ("eta = a/b | %"), for a
+    # dimensionless result.
+    "%": (r"\%", sp.Integer(1), 0.01),
     "m": (r"\mathrm{m}", m, 1),
     "mm": (r"\mathrm{mm}", m, 0.001),
     "cm": (r"\mathrm{cm}", m, 0.01),
@@ -733,6 +765,107 @@ def require_same_dimension(name, args):
     return tuple(converted)
 
 
+_RELATIONS = {
+    "<": sp.Lt, "<=": sp.Le, ">": sp.Gt, ">=": sp.Ge, "==": sp.Eq, "!=": sp.Ne,
+}
+
+# Two computed floats count as equal if they differ by less than this
+# fraction of the larger one: 0.1 + 0.2 == 0.3 is true, and "<=" holds
+# for a value that reaches its limit up to rounding noise.
+COMPARISON_REL_TOL = 1e-12
+
+
+def base_magnitude(value, what: str):
+    """Plain real number of a fully known quantity in SI base units
+    (5'kN -> 5000). Raises ValueError for anything that is not a real
+    number or quantity."""
+    try:
+        magnitude, _ = split_magnitude_unit(convert_to_cached(value, BASE_UNITS))
+        number = sp.N(magnitude)
+    except Exception:
+        raise ValueError(f"{what} must be a number or a quantity.")
+
+    if not number.is_number or not number.is_real:
+        raise ValueError(f"{what} must be a real number or quantity.")
+    return float(number)
+
+
+def substitute_symbols(expr, mapping: dict, opaque: tuple = ()):
+    """Replaces variables (sp.Symbol) in `expr` WITHOUT touching the
+    unit objects in it.
+
+    Do not use expr.subs()/xreplace() for this when `expr` may contain
+    units: a SymPy Quantity keeps its abbreviation as a Symbol among
+    its arguments ("second" has the abbreviation Symbol("s"), "meter"
+    Symbol("m"), ...). subs() descends into these arguments, so
+    replacing a user variable named s, m, g, A, K, N ... silently
+    rewrites the unit itself (seen as a unit "(2.0*meter)" where
+    "second" had been).
+
+    opaque: function classes whose arguments are left alone. Used when
+    a variable is replaced by "variable * unit": inside prop()/haprop()
+    (mathlib/fluids.py) the variable already stands for a plain SI
+    number and must not get a unit.
+    """
+    if isinstance(expr, Quantity) or (opaque and isinstance(expr, opaque)):
+        return expr
+    if expr in mapping:
+        return mapping[expr]
+    if not getattr(expr, "args", None):
+        return expr
+    return expr.func(*[substitute_symbols(arg, mapping, opaque) for arg in expr.args])
+
+
+def require_comparable(what: str, values) -> None:
+    """All fully known values must share one dimension (an exact 0 fits
+    every dimension, like in an addition)."""
+    dims = []
+    for value in values:
+        dim = _known_dimension(value)
+        if dim is not None and value != 0:
+            dims.append(dim)
+
+    if len(set(dims)) > 1:
+        shown = " vs ".join(f"[{dim}]" for dim in dict.fromkeys(dims))
+        raise ValueError(f"{what} incompatible units (dimension {shown})")
+
+
+def compare_values(op: str, left, right):
+    """Evaluates "left op right" (op: < <= > >= == !=).
+
+    Two fully known quantities give sp.true / sp.false; they need the
+    same dimension (5'm < 3'kg is an error, a plain 0 compares with
+    anything), and different units of one dimension are compared by
+    their real size (900'mm < 1'm).
+
+    If a variable without a value is involved (a formula inside a
+    user-defined function that is plotted or solved), a symbolic
+    relation is returned instead, with the units removed like for
+    plot() -- it can then only be used as the condition of if().
+    """
+    for side in (left, right):
+        if not isinstance(side, sp.Expr) or isinstance(side, sp.MatrixBase):
+            raise ValueError("Only numbers and quantities can be compared.")
+
+    if has_only_units_and_numbers(left) and has_only_units_and_numbers(right):
+        require_comparable("Cannot compare", (left, right))
+        a = base_magnitude(left, "A compared value")
+        b = base_magnitude(right, "A compared value")
+        equal = abs(a - b) <= COMPARISON_REL_TOL * max(abs(a), abs(b))
+
+        result = {
+            "<": a < b and not equal,
+            "<=": a < b or equal,
+            ">": a > b and not equal,
+            ">=": a > b or equal,
+            "==": equal,
+            "!=": not equal,
+        }[op]
+        return sp.true if result else sp.false
+
+    return _RELATIONS[op](strip_units_for_plot(left), strip_units_for_plot(right))
+
+
 def normalize_numeric_quantity(expr):
     try:
         if has_only_units_and_numbers(expr):
@@ -856,7 +989,44 @@ def unit_to_pretty_latex(unit):
     except Exception:
         unit_base = unit
 
-    return latex(unit_base)
+    return _base_units_to_latex(unit_base) or latex(unit_base)
+
+
+_BASE_UNIT_NAMES = (
+    (kg, "kg"), (m, "m"), (s, "s"), (A, "A"), (K, "K"), (mol, "mol"), (cd, "cd"),
+)
+
+
+def _base_units_to_latex(unit_base):
+    """A product of powers of the SI base units in the same style as
+    the unit tables, e.g. \\frac{\\mathrm{kg}}{\\mathrm{m}^{4}\\,\\mathrm{s}^{2}}
+    (SymPy's own printer writes \\text{...} and no thin spaces).
+    Returns None for anything that is not such a product."""
+    try:
+        powers = dict(sp.sympify(unit_base).as_powers_dict())
+    except Exception:
+        return None
+
+    numerator, denominator = [], []
+    for symbol, name in _BASE_UNIT_NAMES:
+        exponent = powers.pop(symbol, 0)
+        if exponent == 0:
+            continue
+        if not exponent.is_number or not exponent.is_real:
+            return None
+        size = abs(exponent)
+        shown = str(int(size)) if size == int(size) else f"{float(size):g}"
+        text = rf"\mathrm{{{name}}}" if shown == "1" else rf"\mathrm{{{name}}}^{{{shown}}}"
+        (numerator if exponent > 0 else denominator).append(text)
+
+    if any(factor != 1 for factor in powers) or not (numerator or denominator):
+        return None
+
+    top = r"\,".join(numerator) or "1"
+    if not denominator:
+        return top
+    bottom = r"\,".join(denominator)
+    return rf"\frac{{{top}}}{{{bottom}}}"
 
 
 _UNWRAPPED_UNIT_LATEX = frozenset({r"^\circ"})
@@ -890,7 +1060,10 @@ def wrap_unit_latex(unit_latex: str) -> str:
     return rf"\engiunit{{{unit_latex}}}"
 
 
-def format_scalar_with_unit(expr, rel_tol=1e-4):
+def scalar_parts(expr, rel_tol=1e-4):
+    """(LaTeX of the rounded number, LaTeX of the unit or "") of a
+    computed scalar -- the two halves of format_scalar_with_unit(), for
+    callers that place the unit themselves (matrices)."""
     try:
         value_for_output = convert_to_cached(expr, BASE_UNITS)
         value_for_output = normalize_numeric_quantity(value_for_output)
@@ -906,9 +1079,16 @@ def format_scalar_with_unit(expr, rel_tol=1e-4):
         unit_simpl = unit
 
     if unit == 1 or not getattr(unit_simpl, "has", lambda *args: False)(*UNIT_VALUES):
-        return mag_str
+        return mag_str, ""
 
-    return rf"{mag_str}\,{wrap_unit_latex(unit_to_pretty_latex(unit))}"
+    return mag_str, unit_to_pretty_latex(unit)
+
+
+def format_scalar_with_unit(expr, rel_tol=1e-4):
+    mag_str, unit_latex = scalar_parts(expr, rel_tol=rel_tol)
+    if not unit_latex:
+        return mag_str
+    return rf"{mag_str}\,{wrap_unit_latex(unit_latex)}"
 
 
 def _base_symbol_to_latex(base: str) -> str:
@@ -1009,6 +1189,12 @@ def wrap_sheet_prefix_latex(sheet_name: str) -> str:
 def var_to_latex(var_name: str) -> str:
     if var_name.startswith(VAR_SYMBOL_PREFIX):
         var_name = var_name[len(VAR_SYMBOL_PREFIX):]
+
+    if "\\" in var_name:
+        # The left side of "=" is raw user text. A backslash would start
+        # a LaTeX command there (MathJax's \href{javascript:...} among
+        # them), so such a name is shown as plain text instead.
+        return text_to_latex(var_name)
 
     if "::" in var_name:
         sheet_name, _, rest = var_name.partition("::")

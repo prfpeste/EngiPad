@@ -40,11 +40,13 @@
       }
     };
   </script>
-  <script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml.js"></script>
+  <!-- MathJax and the web fonts are served by EngiPad itself (static/vendor):
+       no request leaves for a CDN or a font service, and the program works
+       without an internet connection. MathJax finds its extensions and fonts
+       relative to this script. -->
+  <script src="{{ url_for('static', filename='vendor/mathjax/tex-chtml.js') }}"></script>
 
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="{{ url_for('static', filename='vendor/fonts/fonts.css') }}">
 
   <link rel="stylesheet" href="{{ url_for('static', filename='main.css') }}?v=9">
 </head>
@@ -54,7 +56,12 @@
       <div class="formula-block">
         {% for item in block %}
           {% if item.type == 'latex' %}
-            <div>$$ {{ item.content | safe }} $$</div>
+            {# No "| safe": the LaTeX string contains user text (comments,
+               error messages). Jinja escapes < > & here, the browser turns
+               them back into plain text, and MathJax reads exactly the same
+               LaTeX as before -- but a "<" in a comment can no longer be
+               read as an HTML tag. #}
+            <div>$$ {{ item.content }} $$</div>
           {% elif item.type == 'plot' %}
             <div><img src="{{ item.src }}" alt="Plot"></div>
           {% elif item.type == 'image' %}
@@ -126,6 +133,9 @@
                 <button type="button" onclick="insertSymbol('Ω');">Ω</button>
                 <button type="button" onclick="insertSymbol('∞');">∞</button>
                 <button type="button" onclick="insertSymbol('ⅈ');">ⅈ</button>
+                <button type="button" onclick="insertSymbol('≤');">≤</button>
+                <button type="button" onclick="insertSymbol('≥');">≥</button>
+                <button type="button" onclick="insertSymbol('≠');">≠</button>
               </div>
             </div>
           </div>
@@ -153,6 +163,18 @@
                 <button type="button" onclick="insertSnippet('asinh()', 1);">asinh(x)</button>
                 <button type="button" onclick="insertSnippet('acosh()', 1);">acosh(x)</button>
                 <button type="button" onclick="insertSnippet('atanh()', 1);">atanh(x)</button>
+                <button type="button" onclick="insertSnippet('erf()', 1);">erf</button>
+                <button type="button" onclick="insertSnippet('erfc()', 1);">erfc</button>
+                <button type="button" onclick="insertSnippet('besselj(0, )', 1);">J₀</button>
+                <button type="button" onclick="insertSnippet('prop( , T, , p, , Water)', 20);">prop</button>
+                <button type="button" onclick="insertSnippet('haprop( , T, , p, , φ, )', 20);">haprop</button>
+                <button type="button" onclick="insertSnippet('min( , )', 4);">min</button>
+                <button type="button" onclick="insertSnippet('max( , )', 4);">max</button>
+                <button type="button" onclick="insertSnippet('round()', 1);">round</button>
+                <button type="button" onclick="insertSnippet('floor()', 1);">floor</button>
+                <button type="button" onclick="insertSnippet('ceil()', 1);">ceil</button>
+                <button type="button" onclick="insertSnippet('sign()', 1);">sign</button>
+                <button type="button" onclick="insertSnippet('if( , , )', 6);">if</button>
               </div>
             </div>
           </div>
@@ -164,6 +186,7 @@
               <div class="chip-grid">
                 <button type="button" onclick="insertSnippet('diff( , x)', 6);">diff</button>
                 <button type="button" onclick="insertSnippet('integrate( , (x, , ))', 11);">∫ integrate</button>
+                <button type="button" onclick="insertSnippet('nintegrate( , (x, , ))', 11);">∫ numeric</button>
                 <button type="button" onclick="insertSnippet('Eq( , )', 4);">Eq(…)</button>
                 <button type="button" onclick="insertSnippet('solve(Eq( , ),  )', 11);">solve</button>
                 <button type="button" onclick="insertSnippet('csolve(Eq( , ),  )', 11);">csolve</button>
@@ -196,6 +219,8 @@
                 <button type="button" onclick="insertSnippet('solve_linear(, )', 14);">solve_linear</button>
                 <button type="button" onclick="insertSnippet('eigenvals()', 1);">eigenvals</button>
                 <button type="button" onclick="insertSnippet('eigenvects()', 1);">eigenvects</button>
+                <button type="button" onclick="insertSnippet('interp( , , )', 6);">interp</button>
+                <button type="button" onclick="insertSnippet('interp2( , , , , )', 10);">interp2</button>
               </div>
             </div>
           </div>
@@ -315,7 +340,7 @@
             <div class="dropdown-panel" data-panel>
               <p class="panel-title">EngiPad</p>
               <dl class="info-list">
-                <dt>Version</dt><dd>1.1.5</dd>
+                <dt>Version</dt><dd>1.1.6</dd>
                 <dt>Author</dt><dd>Prof. Dr. Peter Stein</dd>
                 <dt>Built with</dt><dd>Python, Flask, SymPy</dd>
                 <dt>Coding</dt><dd>Claude Sonnet 5</dd>

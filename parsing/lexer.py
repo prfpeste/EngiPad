@@ -1,7 +1,7 @@
 """Lexer (tokenizer) for the EngiPad expression parser.
 
 Scope:
-    Numbers, identifiers (incl. unicode like Greek letters and
+    Numbers (incl. scientific notation "1.5e-3"), identifiers (incl. unicode like Greek letters and
     underscore subscripts), operators + - * / ^, parentheses (),
     brackets [], comma (function arguments), unit marker ' (simple
     units like "kg", "m" as well as compound units like "m^2/s" --
@@ -9,6 +9,10 @@ Scope:
 
 "::" (sheet reference "Sheet::variable") is one token of its own; a
 single ":" is still rejected.
+
+Comparison operators: < > <= >= == != (also typed as the single
+characters ≤ ≥ ≠). A single "=" is NOT a token: the assignment is
+split off before the parser runs (core/context.py::find_assignment()).
 
 Deliberately NOT included: ";" separators, ":=", "|unit". These
 characters raise a ValueError here, so callers (core/formatter.py) can
@@ -36,6 +40,7 @@ RBRACKET = "RBRACKET"
 COMMA = "COMMA"
 APOSTROPHE = "APOSTROPHE"
 DCOLON = "DCOLON"  # "::" -- sheet reference, e.g. S1::L
+COMPARE = "COMPARE"  # value: "<", ">", "<=", ">=", "==" or "!="
 EOF = "EOF"
 
 _SINGLE_CHAR_TOKENS = {
@@ -50,6 +55,16 @@ _SINGLE_CHAR_TOKENS = {
     "]": RBRACKET,
     ",": COMMA,
     "'": APOSTROPHE,
+}
+
+
+_TWO_CHAR_COMPARISONS = frozenset({"<=", ">=", "==", "!="})
+_ONE_CHAR_COMPARISONS = {
+    "<": "<",
+    ">": ">",
+    "\u2264": "<=",
+    "\u2265": ">=",
+    "\u2260": "!=",
 }
 
 
@@ -95,6 +110,19 @@ def tokenize(text: str) -> list[Token]:
                     seen_dot = True
                 i += 1
 
+            # Scientific notation: "1.5e-3", "2E6". Only taken as an
+            # exponent if digits really follow the "e" (optionally
+            # after a sign) -- "2e" or "3e-x" stay what they were (a
+            # number followed by an identifier, i.e. a syntax error).
+            if i < n and text[i] in "eE":
+                j = i + 1
+                if j < n and text[j] in "+-":
+                    j += 1
+                if j < n and text[j].isdigit():
+                    while j < n and text[j].isdigit():
+                        j += 1
+                    i = j
+
             tokens.append(Token(NUMBER, text[start:i], start))
             continue
 
@@ -111,6 +139,17 @@ def tokenize(text: str) -> list[Token]:
         if ch == ":" and text[i + 1:i + 2] == ":":
             tokens.append(Token(DCOLON, "::", i))
             i += 2
+            continue
+
+        two = text[i:i + 2]
+        if two in _TWO_CHAR_COMPARISONS:
+            tokens.append(Token(COMPARE, two, i))
+            i += 2
+            continue
+
+        if ch in _ONE_CHAR_COMPARISONS:
+            tokens.append(Token(COMPARE, _ONE_CHAR_COMPARISONS[ch], i))
+            i += 1
             continue
 
         if ch in _SINGLE_CHAR_TOKENS:
