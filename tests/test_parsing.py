@@ -226,12 +226,25 @@ class TestParserQuantity:
         with pytest.raises(ValueError):
             parse("5'banana")
 
-    def test_quantity_nested_inside_unit_expr_is_rejected(self):
-        # Known, deliberately unsupported limit: a Quantity (number +
-        # marker) MUST NOT appear inside the unit subtree of another
-        # Quantity -- unit_expr doesn't allow numbers.
-        with pytest.raises(ValueError):
-            parse("5'kg/(3'm)")
+    def test_parenthesis_with_a_number_after_a_unit_is_a_new_factor(self):
+        # Until 13.11.2026 "(" after "*" or "/" always continued the
+        # unit, so these were errors ("Unexpected token NUMBER in unit
+        # expression"). A unit can only start with a name, so a
+        # parenthesis that starts with a number is an ordinary factor.
+        node = parse("5'kg/(3'm)")
+        assert isinstance(node, BinaryOp) and node.op == "/"
+        assert node.left == Quantity(Number("5"), Identifier("kg"))
+        assert node.right == Quantity(Number("3"), Identifier("m"))
+
+        node = parse("2'kg*(0.1'm)^2")
+        assert isinstance(node, BinaryOp) and node.op == "*"
+        assert node.left == Quantity(Number("2"), Identifier("kg"))
+
+    def test_parenthesis_with_a_unit_name_still_continues_the_unit(self):
+        node = parse("5'W/(m*K)")
+        assert isinstance(node, Quantity)
+        node = parse("5'W/((m)*K)")
+        assert isinstance(node, Quantity)
 
 
 # ---------------------------------------------------------------------

@@ -378,6 +378,8 @@ class TestZeroValueWithUnit:
 # gained a postfix level between primary and power (see
 # parse_postfix()), mathlib/sympy_bridge.py applies plain "[]" item
 # access on the already-built value.
+# Since 13.11.2026 counting starts at 1 (sol[1] is the first solution),
+# see mathlib.functions.element_at().
 # ---------------------------------------------------------------------
 class TestSubscriptIndexing:
     def test_picking_one_of_two_solve_results(self):
@@ -386,7 +388,7 @@ class TestSubscriptIndexing:
         code = (
             "eq := Eq(b + 6, 5.*b^2)\n"
             "sol_q = solve(eq, b)\n"
-            "b_1 = sol_q[0] ; b_2 = sol_q[1]\n"
+            "b_1 = sol_q[1] ; b_2 = sol_q[2]\n"
         )
         results = evaluate_code(code)
         rendered = str(results)
@@ -396,7 +398,7 @@ class TestSubscriptIndexing:
 
     def test_indexed_value_can_be_used_in_further_computation(self, ctx, run):
         run("sol_q = solve(Eq(b + 6, 5.*b^2), b)", ctx)
-        run("b_1 = sol_q[0]", ctx)
+        run("b_1 = sol_q[1]", ctx)
         content = run("c = b_1 * 2", ctx)["content"]
         assert "-2" in content
 
@@ -634,7 +636,9 @@ class TestDimensionlessExponentAndArguments:
 
     def test_matrix_power_unaffected(self, ctx, run_content):
         run_content("M = mat([[1,2],[3,4]])", ctx)
-        assert "22.0" in run_content("f = M^2", ctx)
+        # (matrix elements are rounded like scalars since 13.11.2026:
+        # "22", no longer "22.0")
+        assert r"15 & 22\end{matrix}" in run_content("f = M^2", ctx)
 
     def test_symbolic_formulas_with_unassigned_variables_still_work(self, ctx, run_content):
         # Same contract as for the addition check: nothing is known
@@ -735,10 +739,12 @@ class TestUnitSizeMarker:
         assert content.endswith(r"2\,\engiunit{\mathrm{m}} \cdot B")
 
     def test_sympy_fallback_unit_without_pretty_entry_is_wrapped(self, ctx, raw):
-        # No PRETTY_UNITS entry -> unit rendered by SymPy's latex().
+        # No PRETTY_UNITS entry -> generic base-unit display (since
+        # 13.11.2026 in the \mathrm style of the tables, before that
+        # SymPy's latex() with \text).
         raw("a = 5'm", ctx)
         content = raw("f = a^0.5", ctx)
-        assert content.endswith(r"\engiunit{\text{m}^{0.5}}")
+        assert content.endswith(r"\engiunit{\mathrm{m}^{0.5}}")
 
     def test_numbers_variables_and_functions_are_never_wrapped(self, ctx, raw):
         raw("a = 5'm", ctx)
@@ -866,7 +872,11 @@ class TestPlotWithUnits:
         ctx = EvaluationContext()
         ctx.eval_line("L = 2.5'm")
         ctx.eval_line("F = 7.5'kN | N")
-        _, _, _, expr_num, _, _ = ctx.eval_line("M(x_pos) = F * (L - x_pos)")
+        # "M(x_pos) = ..." is a function definition since 13.11.2026
+        # (before: a variable literally named "M(x_pos)"); the plot
+        # path expands the call with the current values of F and L.
+        ctx.eval_line("M(x_pos) = F * (L - x_pos)")
+        expr_num = ctx.resolve_plot_expression("M(x_pos)", "x_pos")
 
         stripped = strip_units_for_plot(expr_num)
         at_zero = sp.N(stripped.subs(sp.Symbol("x_pos"), 0))

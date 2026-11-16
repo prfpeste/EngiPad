@@ -1,6 +1,6 @@
 # EngiPad – User Guide
 
-EngiPad is a calculation notebook for engineers. You type formulas in a plain text editor on the left; the typeset result (LaTeX via MathJax) appears on the right. This guide covers everything you can do with it.
+EngiPad is a calculation notebook for engineers. You type formulas in a plain text editor on the left; the typeset result (LaTeX via MathJax) appears on the right. EngiPad needs no internet connection: MathJax and the fonts are part of the program. This guide covers everything you can do with it.
 
 **Contents**
 
@@ -38,9 +38,9 @@ EngiPad is a calculation notebook for engineers. You type formulas in a plain te
 | Save | Download the editor content as a text file |
 | Undo / Redo | Take back or restore your last changes (also `Ctrl+Z` / `Ctrl+Y`); see below |
 | Greek | Insert Greek letters and symbols |
-| Functions | Insert snippets for `sqrt`, `sin`, `cos`, `log`, … |
-| Equations & calculus | Insert `diff`, `integrate`, `Eq`, `solve`, `sum`, `prod`, `lim`, … |
-| Matrices & vectors | Insert matrix and vector snippets |
+| Functions | Insert snippets for `sqrt`, `sin`, `cos`, `log`, `erf`, `erfc`, `prop`, `haprop`, `min`, `max`, `round`, `if`, … |
+| Equations & calculus | Insert `diff`, `integrate`, `nintegrate`, `Eq`, `solve`, `sum`, `prod`, `lim`, … |
+| Matrices & vectors | Insert matrix and vector snippets, `interp`, `interp2` |
 | Plot | Insert a `plot(...)` snippet |
 | Insert image | Add a PNG picture and insert its `picture(...)` line (see [Pictures](#9-pictures)) |
 | Settings | Rounding, font sizes, timeout, image limit, live update, … (see [Settings](#14-settings)) |
@@ -77,15 +77,88 @@ Several commands on one line are separated by `;`:
 a = 5'm/s^2 ; m = 10'kg ; F = m * a
 ```
 
+**Long statements over several lines.** While a bracket is open, the statement simply continues on the next line. This is made for matrices and long function calls:
+
+```text
+C = mat([
+  [1, 2, 3],
+  [4, 5, 6],
+  [7, 8, 9]])
+```
+
+The statement ends when all brackets are closed. An empty line, or a line that starts a new statement (`name = …`, a text line, a comment, `plot(…)`), also ends it, so a forgotten bracket gives an error in its own line and does not swallow the lines below. A backslash `\` at the end of a line continues the line as well, also without a bracket. Error messages name the first line of the statement.
+
+**Result only: `=:`.** `name =: expression` shows only `name = result`, without repeating the formula. Useful for long input such as a matrix:
+
+```text
+ν = 0.3
+C =: mat([
+  [1-ν, ν],
+  [ν, 1-ν]])
+```
+
+The value is stored like with `=`, and `| unit` works as usual. (The opposite is `:=`, which shows only the formula, see [Symbolic math](#4-symbolic-math).)
+
 A line that contains only an expression (no `=`) is calculated and shown:
 
 ```text
 a^2 + b^2
 ```
 
-Constants: `pi` (or `π`), `e` (Euler's number), `I` (imaginary unit), `∞` (infinity).
+**Your own functions.** Write the name with its parameters on the left:
 
-Numbers use a decimal **point**: `0.25`. Scientific notation: `1.5e-3`.
+```text
+f(x) = x^2 + 1
+I_y(b, h) = b*h^3/12
+y = f(2)
+I = I_y(30'cm, 50'cm) | cm^4
+```
+
+- The definition line shows only the formula. A call shows `f(2) = 5`.
+- Units are checked when the function is called, with the real arguments.
+- Other variables used inside a function have the value they have **when the function is called**: after `a = 2 ; h(x) = a*x ; a = 3`, `h(1)` is 3.
+- A parameter hides a variable of the same name inside the function and does not change it.
+- Functions can call other functions, but not themselves. The names of built-in functions (`sin`, `max`, `if`, …) cannot be redefined.
+- Functions work in `plot`, `nsolve`, `diff`, `integrate` and `solve`: `plot(f(x), x, 0, 5)`.
+- Functions belong to their sheet (see [Worksheets](#12-worksheets-several-sheets-in-one-file)).
+
+**Comparisons and checks.** The operators `<  >  <=  >=  ==  !=` (or `≤ ≥ ≠` from the Greek menu) compare two numbers or quantities and give `true` or `false`:
+
+```text
+σ = 180'MPa ; σ_zul = 235'MPa
+η = σ / σ_zul | %
+σ <= σ_zul | MPa
+```
+
+The last line is shown as a check: the formula, the two values, and the result (*σ ≤ σ_zul: 180 MPa ≤ 235 MPa ⇒ true*). With `| unit` both values are shown in that unit, without it in the unit a result would normally get (here Pa).
+
+- Both sides need the same dimension; `5'm < 3'kg` is an error. Different units are compared by their real size (`900'mm < 1'm` is true). A plain `0` can be compared with any quantity.
+- Equality is written `==` (a single `=` assigns). Values that differ only by rounding noise count as equal, so `0.1 + 0.2 == 0.3` is true.
+- A result can be stored: `ok = σ <= σ_zul`.
+- Chains like `a < b < c` are not possible; write two comparisons.
+- `| %` shows a plain number as a percentage.
+
+**Choosing a value: `if`.** `if(condition, a, b)` gives `a` if the condition is true, otherwise `b`:
+
+```text
+t = if(σ <= σ_zul, 10'mm, 12'mm)
+ramp(x) = if(x < 0, 0, x)
+```
+
+**Smallest, largest, rounding.**
+
+| Function | Meaning |
+|---|---|
+| `min(a, b, …)`, `max(a, b, …)` | smallest / largest value; also of a vector. Quantities need the same dimension. |
+| `round(x)`, `round(x, n)` | round to a whole number / to `n` decimals; halves are rounded away from zero (`round(2.5)` is 3) |
+| `floor(x)`, `ceil(x)` | round down / up to a whole number |
+| `sign(x)` | −1, 0 or 1 |
+
+`round`, `floor` and `ceil` need a plain number. To round a quantity, divide by the unit first: `round(L / 1'mm) * 1'mm`.
+
+Constants: `pi` (or `π`), `∞` (infinity) and the imaginary unit `ⅈ`; `∞` and `ⅈ` are in the Greek menu. For Euler's number write `exp(1)`, and `exp(x)` for eˣ. The letters `e` and `I` are ordinary variable names (for example an elementary charge or a current), not constants.
+
+Numbers use a decimal **point**: `0.25`. Scientific notation: `1.5e-3` or `2E6` (the same as `1.5*10^-3` and `2*10^6`); in a formula it is displayed as a power of ten.
 
 ---
 
@@ -103,7 +176,7 @@ k = 5'W/(m*K)
 p = 2'bar
 ```
 
-Use `*`, `/`, `^` and parentheses inside the unit. Units are checked: adding `5'm + 3'kg` is an error (*incompatible units*), and exponents and arguments of `sin`, `log`, … must be dimensionless.
+Use `*`, `/`, `^` and parentheses inside the unit. A parenthesis after a unit belongs to the unit only if it starts with a unit name (`5'W/(m*K)`); `2'kg*(0.1'm)^2` multiplies by the value in the parentheses. Units are checked: adding `5'm + 3'kg` is an error (*incompatible units*), and exponents and arguments of `sin`, `log`, … must be dimensionless.
 
 Available units include (among many others):
 
@@ -119,8 +192,9 @@ Micro can be typed as `u`, `µ` or `μ` (`5'uF`, `5'µF`). Ohm is typed `Ohm` an
 
 ### 3.2 How results are displayed
 
-- A plain number with a unit that you assign (`T = 110'degC`) keeps the unit you entered.
-- Results of calculations are shown in a fitting unit automatically (e.g. `N` instead of `kg m/s^2`, `J`, `W`, `Pa`, `C` for `A*s`, …).
+- A plain number with a unit that you assign keeps the unit you entered, whatever it is: `T = 110'degC`, `q = 5'kN/m`, `c = 2'N/mm`, `ρ = 998'kg/m^3`.
+- Results of calculations are shown in a fitting SI unit automatically: `N`, `J`, `W`, `Pa`, `C` for `A*s`, and the usual compound units such as `N/m`, `kg/m³`, `m/s`, `kg/s`, `m³/s`, `Pa s`, `W/(m² K)`, `W/(m K)`, `K/W`, `J/(kg K)`. The numbers are in base size (a stress in Pa, a line load in N/m); append `| MPa` or `| kN/m` to choose another unit.
+- A unit without a usual name is written with the SI base units, e.g. kg/(m⁴ s²). If such a unit appears where you expected a stress or a force, a quantity was probably entered with the wrong unit.
 
 ### 3.3 Converting with `|`
 
@@ -139,7 +213,7 @@ c = 4.18'kJ/(kg*K) | J/(kg*K)
 s = 0.5'J | J/K
 ```
 
-The conversion is checked: converting a length to seconds is an error.
+The conversion is checked: converting a length to seconds is an error. The message names both sides, e.g. *the result has dimension [length], the unit [time]*.
 
 You can also convert an existing variable without assigning:
 
@@ -174,7 +248,18 @@ df := diff(f, x)
 
 Available calculus functions include `diff`, `integrate` (indefinite and definite), `lim`, and `Eq`, `solve` (see below).
 
-Other functions: `sqrt`, `exp`, `ln`, `log`, `sin`, `cos`, `tan`, `asin`, `acos`, `atan`, `atan2`, `sinh`, `cosh`, `tanh`, `abs`, and for complex numbers `re`, `im`, `conjugate`, `arg`.
+Other functions: `sqrt`, `exp`, `ln`, `log`, `sin`, `cos`, `tan`, `asin`, `acos`, `atan`, `atan2`, `sinh`, `cosh`, `tanh`, `abs`, and for complex numbers `re`, `im`, `conjugate`, `arg`. `abs(x)` is displayed as |x|.
+
+Special functions: the error function `erf(x)` and `erfc(x)` (for example transient heat conduction, `Θ = erfc(x/(2*sqrt(a*t)))`), and the Bessel functions `besselj(n, x)`, `bessely(n, x)`, `besseli(n, x)`, `besselk(n, x)`, displayed as Jₙ(x), Yₙ(x), Iₙ(x), Kₙ(x). Their arguments must be plain numbers; they can be plotted and used in `nsolve` and `nintegrate`.
+
+**Fluid properties (CoolProp).** `prop` gives properties of fluids and `haprop` those of humid air, with units:
+
+```text
+ρ = prop(ρ, T, 20'degC, p, 1'bar, Water)
+h = haprop(h, T, 25'degC, p, 1.01325'bar, φ, 0.6) | kJ/kg
+```
+
+The order is that of CoolProp's Excel functions: the wanted quantity, then name and value in turn, for `prop` the fluid last. All quantities, fluid names and examples are in **[COOLPROP_GUIDE.md](COOLPROP_GUIDE.md)**.
 
 ---
 
@@ -183,16 +268,45 @@ Other functions: `sqrt`, `exp`, `ln`, `log`, `sin`, `cos`, `tan`, `asin`, `acos`
 ```text
 "Quadratic equation"
 sol = solve(Eq(x^2 - 5, 0), x)
-x_1 = sol[0] ; x_2 = sol[1]
+x_1 = sol[1] ; x_2 = sol[2]
 ```
 
 - `Eq(left, right)` builds an equation.
 - `solve(eq, x)` solves symbolically, `csolve` allows complex solutions, `nsolve(expr, (x), (start))` solves numerically from a start value.
-- `sol[0]`, `sol[1]`, … picks one solution out of a list. Indices start at 0. For matrices: `M[1][2]`.
+- `sol[1]`, `sol[2]`, … picks one solution out of a list. **Counting starts at 1**, as in mathematics. If there is only one solution, `sol[1]` is that solution. For vectors and matrices see [Vectors and matrices](#7-vectors-and-matrices).
 
 ```text
 nsolve((x^2 - 2), (x), (1))
 ```
+
+**`nsolve` with units.** Give the start value the unit of the unknown; the result then has that unit:
+
+```text
+T = 300.15'K ; e = 1.602*10^-19'C ; k = 1.38*10^-23'J/K
+i_k = 200 ; i_s = 9*10^-9
+U_max = nsolve(Eq(exp(e*U_max/(k*T)), (1+i_k/i_s)/(1+e*U_max/(k*T))), U_max, 0.5'V)
+U_max | mV
+```
+
+Internally everything is converted to SI base units and solved as plain numbers, so the result appears in the base unit of the start value (`1'cm` as start gives metres); use `| unit` to convert. A start value without a unit gives a plain number. Notes:
+
+- The unknown must not have a value yet. All other variables in the equation need a value.
+- The equation itself is **not** checked for consistent units. Check the result for plausibility.
+- Systems: `nsolve([eq1, eq2], [x, y], [1'm, 2's])`; pick the values with `r[1]`, `r[2]`.
+- Built-in functions and your own functions can be used inside `nsolve`; an unknown function name is an error.
+
+**Numerical integration: `nintegrate`.** `nintegrate(f, (x, a, b))` computes a definite integral numerically. Use it when `integrate` finds no closed form or takes too long:
+
+```text
+G = nintegrate(exp(-t^2), (t, 0, 2))
+q = 5'kN/m ; L = 4'm
+W = nintegrate(q*s, (s, 0'm, L)) | kNm
+```
+
+- The limits may carry units; the result gets the unit "integrand times variable". As with `nsolve`, the integrand itself is not checked for consistent units.
+- The integration variable must not have a value yet; all other variables need one.
+- Kinks and jumps from `if(...)` or a table (`interp`) are handled: the interval is split there.
+- Infinite limits are not supported.
 
 ---
 
@@ -242,6 +356,58 @@ T(A)
 
 Operators `+ - *` and `^` work on matrices (`A^2`, `A*v`).
 
+**Picking elements.** Counting starts at 1:
+
+```text
+v = vec(5, 6, 7)
+v[1]                 ; 5, the first element
+A = mat([[1, 2], [3, 4]])
+A[2][1]              ; 3: row 2, column 1 (also written A[2, 1])
+A[2]                 ; the second row
+```
+
+An index outside the vector or matrix, the index 0 or a fraction is an error.
+
+**Units.** Give every element its unit, or write one unit behind the whole vector or matrix:
+
+```text
+F = vec(1'kN, 2'kN, 0'kN)
+T = vec(20, 40, 60)'degC
+K = mat([[2, -1], [-1, 2]])'kN/mm
+K | N/m
+```
+
+Results are rounded like single values. If all elements have the same unit it is written once behind the matrix, otherwise at each element. `| unit` converts every element.
+
+**Tables: `interp` and `interp2`.** A table of values is written as two vectors; `interp(x, y, value)` reads it with linear interpolation:
+
+```text
+T = vec(20, 40, 60)'degC
+ρ = vec(998, 992, 983)'kg/m^3
+ρ_30 = interp(T, ρ, 30'degC)        ; 995 kg/m^3
+```
+
+- The x values must rise or fall steadily. The value must have the same kind of unit as the x values.
+- A value **outside the table is an error**; nothing is extrapolated.
+- A table can be wrapped in a function and then plotted or integrated: `ρ_f(t) = interp(vec(20, 40, 60), vec(998, 992, 983), t)`. Inside such a function the variable is a plain number in SI base units.
+
+For a map with two inputs use `interp2(x, y, Z, value_x, value_y)`. `Z` is a matrix whose **rows belong to the x values** and whose **columns belong to the y values**:
+
+```text
+d = vec(10, 20)'mm ; n = vec(1000, 2000)'rpm
+P = mat([[1, 2], [3, 5]])'kW
+interp2(d, n, P, 15'mm, 1500'rpm) | kW      ; 2.75 kW
+```
+
+A larger matrix is easier to type with one row per line, and `=:` shows only the result (see [Basics](#2-basics-assignments-and-calculations)):
+
+```text
+C =: mat([
+  [1-ν, ν, 0],
+  [ν, 1-ν, 0],
+  [0, 0, (1-2*ν)/2]])
+```
+
 ---
 
 ## 8. Plots
@@ -252,6 +418,17 @@ plot(f, x, 0, 2*pi)
 ```
 
 `plot(function, variable, min, max)`. The plot is generated as an image in the output. Functions with units are plotted in SI base units; the axis label says so. Plots are included when you export to LaTeX (as a `.zip`).
+
+Your own variables and functions can be used directly; the plot variable itself stays a variable even if a variable of that name has a value:
+
+```text
+F = 3'kN ; L = 2'm
+plot(F*(L - x), x, 0, 2)
+M(s) = F*(L - s)
+plot(M(s), s, 0, L)
+```
+
+A variable without a value or an unknown function name gives an error message.
 
 ---
 
@@ -318,7 +495,7 @@ L = b*l/b ; '                          [1]'
 
 A text line can sit behind a calculation on the same line (after `;`) – useful for equation numbers or notes.
 
-Special characters such as `^ _ ~ \ % # & $` inside text are displayed correctly.
+Special characters such as `^ _ ~ \ % # & $ < >` inside text are displayed correctly.
 
 ---
 
@@ -446,8 +623,10 @@ Invalid values fall back to the default (the field keeps your input). Values are
 - An error is shown in the output at the line where it occurred, e.g. *Error in line 2: Cannot add/subtract incompatible units*. The other lines are still evaluated.
 - Each calculation has a time limit (*Timeout*, max. 30 s). Very expensive symbolic operations (large integrals, solving big systems) can hit it; simplify the problem or raise the timeout.
 - Picture errors are shown in the line of the `picture(...)`: a wrong option (*width must be a whole number of pixels (1-1200)*), an invalid name, or a picture that is not loaded (*Image 'x' is not loaded*).
-- For safety, only a fixed set of functions is available. An unknown function name is not executed; it stays a symbolic placeholder.
-- Known cosmetic limits: some unusual compound units without a table entry are displayed in SymPy style; `deg/s` is displayed as Hz.
+- For safety, only a fixed set of functions is available. An unknown function name is not executed; it stays a symbolic placeholder. `plot()` and `nsolve()` refuse it with *Unknown function '…'*.
+- A line like `M(x) = F*(L - x)` is a function definition. Older versions stored it as a variable literally named `M(x)` and showed a value next to the formula; such files still calculate and plot, but the line now shows the formula only.
+- **Changed in this version: counting starts at 1.** Older versions counted from 0 (`sol[0]` was the first solution). A file written for an older version that uses `sol[0]` now reports *Indices start at 1*; a file that uses `sol[1]` now gets the **first** solution instead of the second. Check such files once.
+- Known cosmetic limits: `deg/s` is displayed as Hz; a moment is displayed in J unless you append `| Nm`.
 
 ---
 
@@ -458,10 +637,23 @@ Invalid values fall back to the default (the field keeps your input). Values are
 | Assign with unit | `F = 10'kN` |
 | Convert the result | `E = 5'kW*3'h \| kWh` |
 | Show a formula without evaluating | `f := x^2 + 1` |
+| Define and use a function | `f(x) = x^2 + 1` then `f(2)` |
+| Check a condition | `σ <= σ_zul \| MPa` |
+| Utilisation in percent | `η = σ / σ_zul \| %` |
+| Choose a value | `if(a < b, 1, 2)` |
+| Smallest / largest / rounded | `min(a, b)`, `max(a, b)`, `round(x, 2)` |
+| Show only the result | `C =: mat([[1,2],[3,4]])` |
+| Continue a statement on the next line | leave a bracket open (or end the line with `\`) |
 | Derivative / integral | `diff(f, x)`, `integrate(f, (x, 0, 1))` |
-| Solve and pick a solution | `s = solve(Eq(x^2-4, 0), x)` then `s[0]` |
+| Solve and pick a solution | `s = solve(Eq(x^2-4, 0), x)` then `s[1]` |
+| Solve numerically with a unit | `U = nsolve(Eq(...), U, 0.5'V)` |
 | Sum | `sum(i, (i, 1, n))` |
 | Vector / matrix | `vec(1,2,3)`, `mat([[1,2],[3,4]])` |
+| Element of a vector / matrix | `v[1]`, `A[2][1]` or `A[2, 1]` (counting from 1) |
+| Vector with one unit | `vec(20, 40, 60)'degC` |
+| Read a table | `interp(T, ρ, 30'degC)` |
+| Integrate numerically | `nintegrate(q*s, (s, 0'm, L))` |
+| Fluid property | `prop(ρ, T, 20'degC, p, 1'bar, Water)` (see COOLPROP_GUIDE.md) |
 | Plot | `plot(sin(x), x, 0, 2*pi)` |
 | Show a picture | button *Insert image*, then `picture("beam", width=300, align=left)` |
 | Comment (not shown) | `# text` |

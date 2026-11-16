@@ -2,9 +2,9 @@
 
 They need the optional packages `playwright` and a Chromium for it
 (`pip install playwright && playwright install chromium`); without them
-the whole module is skipped. MathJax and web fonts come from the internet
-and are blocked here -- the tests only look at the editor, not at the
-typeset output.
+the whole module is skipped. MathJax and the web fonts are served by the
+application itself (static/vendor); every request to another host is
+blocked and makes the test fail, so the page is proven to work offline.
 """
 
 import struct
@@ -44,9 +44,18 @@ def browser():
 def page(browser, base_url):
     context = browser.new_context(viewport={"width": 1300, "height": 800})
     page = context.new_page()
-    page.on("dialog", lambda d: d.accept())
-    page.route("**/cdn.jsdelivr.net/**", lambda r: r.abort())
-    page.route("**/fonts.googleapis.com/**", lambda r: r.abort())
+    dialogs = []
+    page.on("dialog", lambda d: (dialogs.append(d.message), d.accept()))
+    external = []
+
+    def only_local(route):
+        if route.request.url.startswith(base_url):
+            route.continue_()
+        else:
+            external.append(route.request.url)
+            route.abort()
+
+    page.route("**/*", only_local)
     errors = []
     page.on("pageerror", lambda e: errors.append(str(e)))
     page.goto(base_url, wait_until="domcontentloaded")
@@ -56,8 +65,10 @@ def page(browser, base_url):
     page.fill("#code-textarea", "")          # start with an empty editor
     page.evaluate("resetHistory()")
     page.errors = errors
+    page.dialogs = dialogs
     yield page
     assert not errors, errors
+    assert not external, f"request to another host: {external}"
     context.close()
 
 
@@ -373,3 +384,39 @@ class TestSurvivesCalculate:
             restoreHistoryAfterReload(); }""")
         assert not undo_enabled(page)
         assert page.evaluate("sessionStorage.getItem('engipad_history')") is None
+
+
+class TestTypesetOutputOffline:
+    """The result column in a real browser, with every other host
+    blocked (see the page fixture)."""
+
+    CODE = (
+        '"Check: a<b and c>d <img src=x onerror=alert(1)>"\n'
+        "F = 12'kN ; a = abs(-10)\n"
+        "C =: mat([\n[1, 2],\n[3, 4]])\n"
+    )
+
+    def calculate(self, page):
+        page.fill("#code-textarea", self.CODE)
+        page.keyboard.press("Control+Enter")
+        page.wait_for_function(
+            "document.querySelectorAll('.col-result mjx-container').length >= 3"
+        )
+
+    def test_mathjax_typesets_without_internet(self, page):
+        self.calculate(page)
+        assert page.locator(".col-result mjx-merror").count() == 0
+        assert page.locator(".col-result .engi-unit").count() >= 1
+
+    def test_comment_markup_is_shown_as_text_and_not_run(self, page):
+        self.calculate(page)
+        shown = page.locator(".col-result mjx-container").first.text_content()
+        assert "a<b and c>d" in shown
+        assert "<img src=x onerror=alert(1)>" in shown
+        assert page.locator(".col-result img[src='x']").count() == 0
+        assert page.dialogs == []
+
+    def test_web_fonts_are_loaded_from_the_application(self, page):
+        page.evaluate("document.fonts.ready")
+        assert page.evaluate("document.fonts.check('14px Inter')")
+        assert page.evaluate("document.fonts.check('14px \"JetBrains Mono\"')")

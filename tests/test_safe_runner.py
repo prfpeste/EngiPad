@@ -112,3 +112,43 @@ class TestTimeoutIntegrationInApp:
         assert response.status_code == 200
         assert elapsed < 4
         assert b"Timeout" in response.data
+
+
+def _big_result(size):
+    return "x" * size
+
+
+def _dies():
+    import os
+    os._exit(3)
+
+
+class TestLargeResultsAndCrashes:
+    """A result larger than the pipe buffer (about 64 KB) used to block:
+    the child could not finish writing while the parent waited for it to
+    exit, and the parent then reported a timeout. Seen in practice with
+    three or more plots in one sheet."""
+
+    def test_large_result_is_returned_quickly(self):
+        start = time.time()
+        status, value = run_with_timeout(_big_result, args=(2_000_000,), timeout=5)
+        assert status == "ok"
+        assert len(value) == 2_000_000
+        assert time.time() - start < 3
+
+    def test_child_that_dies_is_an_error_not_a_timeout(self):
+        start = time.time()
+        status, value = run_with_timeout(_dies, timeout=5)
+        assert status == "error"
+        assert "unexpectedly" in value
+        assert time.time() - start < 3
+
+    def test_three_plots_in_one_sheet(self):
+        from app import app
+
+        code = "\n".join(f"plot(sin({i}*x), x, 0, 10)" for i in (1, 2, 3, 4))
+        start = time.time()
+        body = app.test_client().post("/", data={"code": code}).get_data(as_text=True)
+        assert body.count("data:image/png;base64,") == 4
+        assert "took longer than" not in body
+        assert time.time() - start < 8

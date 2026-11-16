@@ -163,9 +163,12 @@ class TestPrettyUnitLookup:
         assert units_mod._find_pretty_latex_fast(unit) == units_mod._find_pretty_latex_slow(unit)
 
     def test_unit_without_entry_falls_back_to_base_units(self):
+        # (generic base-unit display in the \mathrm style of the tables
+        # since 13.11.2026; before that SymPy's own latex())
         unit = ohm / kelvin
-        expected = units_mod.latex(convert_to_cached(unit, BASE_UNITS))
-        assert units_mod.unit_to_pretty_latex(unit) == expected
+        assert units_mod.unit_to_pretty_latex(unit) == (
+            r"\frac{\mathrm{kg}\,\mathrm{m}^{2}}{\mathrm{s}^{3}\,\mathrm{A}^{2}\,\mathrm{K}}"
+        )
 
     def test_many_lookups_are_fast(self):
         start = time.perf_counter()

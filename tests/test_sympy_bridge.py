@@ -6,6 +6,7 @@ bridge itself rather than at some other spot in the larger evaluation
 pipeline.
 """
 
+import pytest
 import sympy as sp
 
 from mathlib.sympy_bridge import ast_to_sympy
@@ -110,18 +111,37 @@ class TestListAndTupleLiterals:
 
 
 class TestSubscript:
+    # Counting starts at 1 (13.11.2026), see
+    # mathlib.functions.element_at().
     def test_list_indexing(self):
-        assert build("lst[1]", var_ns={"lst": [10, 20, 30]}) == 20
+        assert build("lst[2]", var_ns={"lst": [10, 20, 30]}) == 20
 
     def test_chained_indexing(self):
-        assert build("m[0][1]", var_ns={"m": [[1, 2], [3, 4]]}) == 2
+        assert build("m[1][2]", var_ns={"m": [[1, 2], [3, 4]]}) == 2
 
     def test_matrix_indexing(self):
         M = sp.Matrix([[1, 2], [3, 4]])
-        assert build("M[0]", var_ns={"M": M}) == 1
+        assert build("M[2][1]", var_ns={"M": M}) == 3
+        assert build("M[2, 1]", var_ns={"M": M}) == 3
+        assert build("M[1]", var_ns={"M": M}) == sp.Matrix([[1, 2]])
+
+    def test_vector_indexing(self):
+        v = sp.Matrix([5, 6, 7])
+        assert build("v[1]", var_ns={"v": v}) == 5
+        assert build("v[3]", var_ns={"v": v}) == 7
 
     def test_expression_as_index(self):
-        assert build("lst[1+1]", var_ns={"lst": [10, 20, 30]}) == 30
+        assert build("lst[1+1]", var_ns={"lst": [10, 20, 30]}) == 20
+
+    @pytest.mark.parametrize("text, message", [
+        ("lst[0]", "Indices start at 1"),
+        ("lst[4]", "out of range"),
+        ("lst[-1]", "out of range"),
+        ("lst[1.5]", "whole number"),
+    ])
+    def test_bad_index(self, text, message):
+        with pytest.raises(ValueError, match=message):
+            build(text, var_ns={"lst": [10, 20, 30]})
 
 
 class TestSecurityInvariant:
