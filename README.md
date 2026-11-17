@@ -25,7 +25,7 @@ The interface consists of a text editor on the left and a LaTeX/plot output area
 ## Screenshots
 
 ### Heat transfer – heat exchanger
-Fluid properties from CoolProp, `solve`, a sketch in the output
+Fluid properties from CoolProp, solve, a sketch in the output
 
 ![Heat exchanger calculation with CoolProp fluid properties](images/SC1.png)
 
