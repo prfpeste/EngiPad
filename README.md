@@ -22,14 +22,33 @@ The interface consists of a text editor on the left and a LaTeX/plot output area
 
 [Download for Linux (.AppImage)](https://github.com/prfpeste/EngiPad/releases/download/v1.1.6/EngiPad-1.1.6-linux-x86_64.AppImage)
 
-## Screenshot
+## Screenshots
 
-![EngiPad screenshot](images/SC1.png)
-![EngiPad screenshot](images/SC2.png)
-![EngiPad screenshot](images/SC3a.png)
-![EngiPad screenshot](images/SC3b.png)
-![EngiPad screenshot](images/SC4.png)
-![EngiPad screenshot](images/SC5.png)
+### Heat transfer – heat exchanger
+Fluid properties from CoolProp, `solve`, a sketch in the output
+
+![Heat exchanger calculation with CoolProp fluid properties](images/SC1.png)
+
+### Fluid mechanics – laminar pipe flow
+Definite integral with units, own function, laminar check, plot
+
+![Laminar pipe flow with integration and velocity profile plot](images/SC2.png)
+
+### Mechanics – simply supported beam
+Two worksheets (inputs and results), unit conversion, stress check and utilisation
+
+![Beam inputs with sketch on the first worksheet](images/SC3a.png)
+![Beam results with bending stress check on the second worksheet](images/SC3b.png)
+
+### Mechanics – angular momentum
+Matrix and vector with units
+
+![Inertia tensor times angular velocity with units](images/SC4.png)
+
+### Control engineering – step response
+Derivative, overshoot check, numerical integration, plot
+
+![PT1 and PT2 step response with overshoot check and plot](images/SC5.png)
 
 ## User guide
 
