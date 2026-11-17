@@ -26,8 +26,10 @@ The interface consists of a text editor on the left and a LaTeX/plot output area
 
 ![EngiPad screenshot](images/SC1.png)
 ![EngiPad screenshot](images/SC2.png)
-![EngiPad screenshot](images/SC3.png)
+![EngiPad screenshot](images/SC3a.png)
+![EngiPad screenshot](images/SC3b.png)
 ![EngiPad screenshot](images/SC4.png)
+![EngiPad screenshot](images/SC5.png)
 
 ## User guide
 
