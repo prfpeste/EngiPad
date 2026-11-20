@@ -16,10 +16,16 @@ Free, open-source calculation notebook for engineers: physical units, symbolic m
 
 The interface consists of a text editor on the left and a LaTeX/plot output area on the right.
 
-## Try the Web Version
-No installation required, just press the link:
+## Try the web version
 
-https://prfpeste.github.io/EngiPad/
+No installation: **[open EngiPad in your browser](https://prfpeste.github.io/EngiPad/)**
+
+Everything runs in the browser (Python compiled to WebAssembly with [Pyodide](https://pyodide.org)); nothing is sent to a server.
+
+- The first visit loads about 45 MB and takes 10–40 seconds, depending on the connection. After that the browser cache keeps the files and EngiPad is ready in about a second.
+- Plots and fluid properties (CoolProp) are loaded in the background a few seconds later.
+- Works in current Chrome, Edge and Firefox, also on Android. On iPad/iPhone (Safari) the start takes longer.
+- Use *Save* to keep your work as a file; the browser only keeps a backup.
 
 ## Download
 
