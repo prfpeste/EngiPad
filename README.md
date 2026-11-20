@@ -17,6 +17,8 @@ Free, open-source calculation notebook for engineers: physical units, symbolic m
 The interface consists of a text editor on the left and a LaTeX/plot output area on the right.
 
 ## Try the Web Version
+No installation required, just press the link:
+
 https://prfpeste.github.io/EngiPad/
 
 ## Download
