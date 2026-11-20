@@ -241,3 +241,117 @@ class TestScientificNotation:
         assert contents("a = e^1\n") == ["a = e^{1} = e"]
         assert contents("c = exp(1)\n") == ["c = e^{1} = 2.7183"]
         assert contents("b = ⅈ^2\n") == ["b = i^{2} = -1"]
+
+
+class TestPercentAsInput:
+    """B3 (20.11.2026): "40'%" is the plain number 0.4. "%" is read only
+    right after the unit marker (parsing/lexer.py), never inside a
+    compound unit, and is NOT in UNIT_NS (a bare 1/100 among the unit
+    values would make every 0.01 look like a unit)."""
+
+    def test_assignment_keeps_the_typed_percent(self):
+        assert contents("a = 40'%\n") == [r"a = 40\,\%"]
+
+    def test_value_is_a_plain_number(self):
+        assert contents("a = 40'%\nb = a*2\n")[-1] == r"b = a \cdot 2 = 0.8"
+        assert contents("c =: 5'% + 0.1\n")[-1] == "c = 0.15"
+        assert contents("v = vec(10, 20)'%\nw =: v[2]*2\n")[-1] == "w = 0.4"
+
+    def test_check_against_a_limit(self):
+        out = contents("M_p = 0.37\nM_p <= 40'%\n")[-1]
+        assert out.endswith(r"0.37 \le 0.4 \;\Rightarrow\; \text{true}")
+
+    def test_percent_display_target_unchanged(self):
+        assert contents("η = 0.37 | %\n") == [r"\eta = 37\,\%"]
+
+    def test_number_after_percent_is_a_new_factor(self):
+        assert contents("f =: 40'%*3\n") == ["f = 1.2"]
+
+    @pytest.mark.parametrize("code, message", [
+        ("5'm <= 40'%\n", "Cannot compare incompatible units"),
+        ("x = 7 % 2\n", "Unexpected character"),
+        ("y = %\n", "Unexpected character"),
+        ("g = 40'%^2\n", "cannot be raised to a power"),
+        ("h = 3'%/K\n", "cannot be combined with other units"),
+        ("a = 2\nf = 40'%*a\n", "cannot be combined with other units"),
+    ])
+    def test_errors(self, code, message):
+        assert message in contents(code)[-1]
+
+    def test_unit_values_contain_no_plain_number(self):
+        from mathlib.units import UNIT_NS, UNIT_VALUES
+
+        assert "%" not in UNIT_NS
+        assert all(not getattr(value, "is_Number", False) for value in UNIT_VALUES)
+
+    def test_percent_survives_a_real_pdflatex_compile(self, tmp_path):
+        import shutil
+        import subprocess
+
+        if shutil.which("pdflatex") is None:
+            pytest.skip("pdflatex not installed")
+        from core.latex_export import build_latex_document
+
+        tex, _ = build_latex_document(evaluate_code("a = 40'%\nM_p = 0.37\nM_p <= a\nb = a*2\n"))
+        assert r"\%" in tex
+        (tmp_path / "doc.tex").write_text(tex, encoding="utf-8")
+        proc = subprocess.run(
+            ["pdflatex", "-interaction=nonstopmode", "-halt-on-error", "doc.tex"],
+            cwd=tmp_path, capture_output=True, text=True, timeout=60,
+        )
+        assert proc.returncode == 0, proc.stdout[-2000:]
+
+
+PT2 = "h(t) = K*(1 - exp(-δ*t)*(cos(ω_d*t) + δ/ω_d*sin(ω_d*t)))\ng = diff(h(t), t)\n"
+
+
+class TestRewriteFunctions:
+    """B1 (20.11.2026): simplify, expand, factor -- only where the user
+    writes them. They are in NUMERIC_FUNCTIONS/PLOT_FUNCTIONS, NOT in
+    DISPLAY_FUNCTIONS, so the formula display never rewrites the input."""
+
+    def test_simplify_step_response(self):
+        out = contents(PT2 + "g_s = simplify(g)\n")[-1]
+        left, result = out.split(r"\right) = ", 1)
+        assert left == r"g_{\text{s}} = \operatorname{simplify}\left(g"
+        assert result == (
+            r"\frac{K \cdot \left(\delta^{2} + \omega_{\text{d}}^{2}\right) \cdot "
+            r"e^{-t \cdot \delta} \cdot \sin\left(t \cdot \omega_{\text{d}}\right)}{\omega_{\text{d}}}"
+        )
+
+    def test_without_simplify_nothing_changes(self):
+        out = contents(PT2)[-1]
+        assert "simplify" not in out
+        assert r"\delta^{2} + \omega" not in out
+
+    def test_expand_and_factor(self):
+        assert contents("a = expand((x + y)^2)\n")[-1].endswith(r"= x^{2} + 2 \cdot x \cdot y + y^{2}")
+        assert contents("b = factor(x^2 - 1)\n")[-1].endswith(r"= \left(x - 1\right) \cdot \left(x + 1\right)")
+
+    def test_units_are_kept(self):
+        code = "F = 3'kN ; L = 2'm\nM = simplify((F*L + F*L)/2) | kNm\n"
+        assert contents(code)[-1].endswith(r"= 6\,\mathrm{kNm}")
+        assert contents("v = expand(2*(3'm + 4'mm))\n")[-1].endswith(r"= 6.008\,\mathrm{m}")
+
+    def test_with_own_function(self):
+        assert contents("f(x) = x^2\nexpand(f(x + 1))\n")[-1].endswith(r"= x^{2} + 2 \cdot x + 1")
+
+    def test_factor_stays_usable_as_a_variable_name(self):
+        assert contents("factor = 1.5\nF_d = factor*2'kN | kN\n")[-1].endswith(r"= 3\,\mathrm{kN}")
+
+    def test_not_in_the_display_table(self):
+        from mathlib.functions import DISPLAY_FUNCTIONS, NUMERIC_FUNCTIONS, PLOT_FUNCTIONS
+
+        for name in ("simplify", "expand", "factor"):
+            assert name not in DISPLAY_FUNCTIONS
+            assert callable(NUMERIC_FUNCTIONS[name]) and callable(PLOT_FUNCTIONS[name])
+
+    def test_unknown_function_inside_stays_refused_in_plot(self):
+        assert "Unknown function 'unknownfn'" in contents("plot(simplify(unknownfn(x)), x, 0, 1)\n")[-1]
+
+    def test_toolbar_buttons(self):
+        from pathlib import Path
+
+        template = (Path(__file__).resolve().parent.parent / "templates" / "base.html").read_text(encoding="utf-8")
+        for snippet in ("simplify()", "expand()", "factor()"):
+            assert f"insertSnippet('{snippet}'" in template

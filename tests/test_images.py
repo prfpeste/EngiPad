@@ -572,7 +572,7 @@ class TestBrowserCode:
 
     def test_saved_file_and_autosave_include_images(self):
         assert re.search(r"function saveFile\(\) \{\s+const text = getFileText\(\)", self.editor)
-        assert "setItem(AUTOSAVE_KEY, getFileText())" in self.editor
+        assert "setItem(AUTOSAVE_TASK_KEY, getFileText())" in self.editor
 
     def test_insert_snippet_keeps_the_undo_history(self):
         body = self.editor.split("function insertSnippet(")[1].split("\n}\n")[0]
@@ -592,7 +592,11 @@ class TestBrowserCode:
         assert im.parse_picture_call(line)["width"] == 500
 
     def test_export_fills_the_image_data_only_for_the_export_button(self):
-        assert "'/export/latex'" in self.editor and "export-images-field" in self.editor
+        # server version: static/server_shell.js fills the field for the
+        # export button only; editor.js provides the data
+        shell = (ROOT / "static" / "server_shell.js").read_text(encoding="utf-8")
+        assert "'/export/latex'" in shell and "export-images-field" in shell
+        assert "function exportImagesJson()" in self.editor
 
     def test_live_update_refills_pictures(self):
         update = self.editor.split("function runLiveUpdate()")[1].split("function initLiveUpdate")[0]

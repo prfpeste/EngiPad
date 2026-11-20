@@ -106,16 +106,19 @@ def tiny_png(tmp_path):
 
 
 class TestToolbar:
-    def test_buttons_sit_between_save_and_greek_in_their_own_group(self, page):
+    def test_order_new_open_save_undo_redo_calculate_then_the_menus(self, page):
+        # New Open Save | Undo Redo | Calculate | Greek Functions ... | Settings
         order = page.evaluate("""() => [...document.querySelectorAll('.col-input .toolbar > *')]
-            .map(e => e.id || e.getAttribute('data-icon') || e.className
-                      || e.querySelector('[data-icon]')?.getAttribute('data-icon'))""")
-        start = order.index("save")
-        assert order[start:start + 5] == ["save", "tool-divider", "undo-btn", "redo-btn",
-                                          "tool-divider"]
-        assert page.evaluate("""() => {
-            const d = document.querySelector('#redo-btn').nextElementSibling.nextElementSibling;
-            return !!d.querySelector('[data-icon=\\"greek\\"]'); }""")
+            .filter(e => e.type !== 'file')
+            .map(e => e.id || e.getAttribute('data-icon') || e.className.split(' ')[0]
+                      || e.querySelector('[data-icon]')?.getAttribute('data-icon'))
+            .map(x => x === 'dropdown' ? null : x)""")
+        names = [x for x in order if x]
+        assert names[:9] == ["new-calc-btn", "open", "save", "tool-divider", "undo-btn", "redo-btn",
+                             "tool-divider", "calc", "tool-divider"]
+        icons = page.evaluate("""() => [...document.querySelectorAll('.col-input .toolbar [data-collapsible]')]
+            .map(e => e.getAttribute('data-icon') || e.querySelector('[data-icon]').getAttribute('data-icon'))""")
+        assert icons == ["greek", "math_func", "solve_equ", "matrix", "plot", "image_plus", "settings"]
 
     def test_icons_are_loaded(self, page):
         assert page.query_selector("#undo-btn svg") and page.query_selector("#redo-btn svg")

@@ -353,7 +353,12 @@ class TestResultColumnEscapesHtml:
     def test_template_does_not_mark_results_as_safe(self):
         from pathlib import Path
 
-        template = (Path(__file__).resolve().parent.parent / "templates" / "index.html").read_text(encoding="utf-8")
+        # every page template (base.html holds the result column)
+        template = "".join(
+            path.read_text(encoding="utf-8")
+            for path in (Path(__file__).resolve().parent.parent / "templates").glob("*.html")
+        )
+        assert "render_blocks" in template
         assert "item.content | safe" not in template
         assert "item.content|safe" not in template
 

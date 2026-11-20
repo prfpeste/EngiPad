@@ -1,0 +1,183 @@
+{
+ "_comment": "Packages of the web version (tools/build_web.py). They are NOT in the repository; the build takes them from a cache folder (--cache or ENGIPAD_WEB_CACHE) and checks every file against the SHA-256 below. See WEB_VERSION.md for how to fill the cache.",
+ "pyodide": {
+  "version": "314.0.8",
+  "file": "pyodide-314.0.8.tgz",
+  "sha256": "9a52704e0ae5b07aaacb8e4fed9f1658e8024694a078695ea45ac79dee4cefcb",
+  "get": "npm pack pyodide@314.0.8   (in the cache folder)"
+ },
+ "binaryen": {
+  "version": "132.0.0",
+  "folder": "node_modules/binaryen",
+  "get": "npm install --prefix <cache folder> binaryen@132.0.0"
+ },
+ "wheel_sources": {
+  "pypi": "pip download --no-deps --only-binary=:all: --python-version 3.14 -d <cache folder>/wheels {name}=={version}",
+  "pyodide": "https://cdn.jsdelivr.net/pyodide/v314.0.8/full/{file}   (save into <cache folder>/wheels; browsers may name it ...wasm, that is accepted)"
+ },
+ "wheels": [
+  {
+   "name": "mpmath",
+   "version": "1.4.1",
+   "file": "mpmath-1.4.1-py3-none-any.whl",
+   "sha256": "dc4f0ea2304480d4a9a48a94c1020571558ade522b44a6912efac63a586e140f",
+   "kind": "pure",
+   "source": "pypi"
+  },
+  {
+   "name": "sympy",
+   "version": "1.14.0",
+   "file": "sympy-1.14.0-py3-none-any.whl",
+   "sha256": "e091cc3e99d2141a0ba2847328f5479b05d94a6635cb96148ccb3f34671bd8f5",
+   "kind": "pure",
+   "source": "pypi"
+  },
+  {
+   "name": "markupsafe",
+   "version": "3.0.3",
+   "file": "markupsafe-3.0.3-cp314-cp314-pyemscripten_2026_0_wasm32.whl",
+   "sha256": "b44c364dc0d19e4210ce68ab77833c2b5d608f78fe6966263add4fc1fa667d97",
+   "kind": "pure",
+   "source": "pyodide"
+  },
+  {
+   "name": "jinja2",
+   "version": "3.1.6",
+   "file": "jinja2-3.1.6-py3-none-any.whl",
+   "sha256": "85ece4451f492d0c13c5dd7c13a64681a86afae63a5f347908daf103ce6d2f67",
+   "kind": "pure",
+   "source": "pypi"
+  },
+  {
+   "name": "six",
+   "version": "1.17.0",
+   "file": "six-1.17.0-py2.py3-none-any.whl",
+   "sha256": "4721f391ed90541fddacab5acf947aa0d3dc7d27b2e1e8eda2be8970586c3274",
+   "kind": "pure",
+   "source": "pypi"
+  },
+  {
+   "name": "cycler",
+   "version": "0.12.1",
+   "file": "cycler-0.12.1-py3-none-any.whl",
+   "sha256": "85cef7cff222d8644161529808465972e51340599459b8ac3ccbac5a854e0d30",
+   "kind": "pure",
+   "source": "pypi"
+  },
+  {
+   "name": "fonttools",
+   "version": "4.62.1",
+   "file": "fonttools-4.62.1-py3-none-any.whl",
+   "sha256": "7487782e2113861f4ddcc07c3436450659e3caa5e470b27dc2177cade2d8e7fd",
+   "kind": "pure",
+   "source": "pypi"
+  },
+  {
+   "name": "packaging",
+   "version": "26.1",
+   "file": "packaging-26.1-py3-none-any.whl",
+   "sha256": "5d9c0669c6285e491e0ced2eee587eaf67b670d94a19e94e3984a481aba6802f",
+   "kind": "pure",
+   "source": "pypi"
+  },
+  {
+   "name": "pyparsing",
+   "version": "3.3.2",
+   "file": "pyparsing-3.3.2-py3-none-any.whl",
+   "sha256": "850ba148bd908d7e2411587e247a1e4f0327839c40e2e5e6d05a007ecc69911d",
+   "kind": "pure",
+   "source": "pypi"
+  },
+  {
+   "name": "python-dateutil",
+   "version": "2.9.0.post0",
+   "file": "python_dateutil-2.9.0.post0-py2.py3-none-any.whl",
+   "sha256": "a8b2bc7bffae282281c8140a97d3aa9c14da0b136dfe83f850eea9a5f7470427",
+   "kind": "pure",
+   "source": "pypi"
+  },
+  {
+   "name": "pytz",
+   "version": "2026.1.post1",
+   "file": "pytz-2026.1.post1-py2.py3-none-any.whl",
+   "sha256": "f2fd16142fda348286a75e1a524be810bb05d444e5a081f37f7affc635035f7a",
+   "kind": "pure",
+   "source": "pypi"
+  },
+  {
+   "name": "numpy",
+   "version": "2.4.6",
+   "file": "numpy-2.4.6-cp314-cp314-pyemscripten_2026_0_wasm32.whl",
+   "sha256": "a292c1f5d7d8a2208cd5e94fc467604c131cabcd2fc14fed6eefde121e7fabdf",
+   "kind": "background",
+   "source": "pyodide"
+  },
+  {
+   "name": "kiwisolver",
+   "version": "1.5.0",
+   "file": "kiwisolver-1.5.0-cp314-cp314-pyemscripten_2026_0_wasm32.whl",
+   "sha256": "47781998156721147c128a3c74547d5703e0e3cc454d8203e629339368308a93",
+   "kind": "background",
+   "source": "pyodide"
+  },
+  {
+   "name": "pillow",
+   "version": "12.2.0",
+   "file": "pillow-12.2.0-cp314-cp314-pyemscripten_2026_0_wasm32.whl",
+   "sha256": "e29838b7a756e4ee0f27a9cfa9a387ee0dfa2e9dd44be2dd595130b9f9d93ac3",
+   "kind": "background",
+   "source": "pyodide"
+  },
+  {
+   "name": "contourpy",
+   "version": "1.3.3",
+   "file": "contourpy-1.3.3-cp314-cp314-pyemscripten_2026_0_wasm32.whl",
+   "sha256": "0ac15ebf9f820d2d1c3526388aa2818b631cb6c4aae1682efd6b4cc12c1f302c",
+   "kind": "background",
+   "source": "pyodide"
+  },
+  {
+   "name": "matplotlib",
+   "version": "3.10.8",
+   "file": "matplotlib-3.10.8-cp314-cp314-pyemscripten_2026_0_wasm32.whl",
+   "sha256": "722857932f8f62eac64f8439af15c94d427f9fb945f9590cd242805c983d2d54",
+   "kind": "background",
+   "source": "pyodide"
+  },
+  {
+   "name": "coolprop",
+   "version": "7.2.0",
+   "file": "coolprop-7.2.0-cp314-cp314-pyemscripten_2026_0_wasm32.whl",
+   "sha256": "d7d5cac5c252b90052a1b07602e3d4dd41bc2d5bc78e999f99aac21ab826f350",
+   "kind": "background",
+   "source": "pyodide"
+  }
+ ],
+ "groups": {
+  "numpy": {
+   "wheels": [
+    "numpy"
+   ],
+   "needs": []
+  },
+  "matplotlib": {
+   "wheels": [
+    "kiwisolver",
+    "pillow",
+    "contourpy",
+    "matplotlib"
+   ],
+   "needs": [
+    "numpy"
+   ]
+  },
+  "coolprop": {
+   "wheels": [
+    "coolprop"
+   ],
+   "needs": [
+    "numpy"
+   ]
+  }
+ }
+}

@@ -225,6 +225,84 @@ class TestFunctionsInPlotAndNsolve:
         assert self.is_plot(code)
 
 
+PIPE = (
+    "u(r) = u_max*(1 - r^2/R^2)\n"
+    "R = 10'mm ; u_max = 0.2'm/s ; η = 1.0e-3'Pa*s\n"
+    "τ(r) = -η*diff(u(r), r)\n"
+)
+
+
+class TestCalculusOverAParameter:
+    """A2 (20.11.2026): a parameter that is the VARIABLE of diff/
+    integrate/lim/sum/prod in the body ("τ(r) = -η*diff(u(r), r)") used
+    to get the argument first, so diff() was asked for a derivative with
+    respect to "0.01 m". Now: derive with a placeholder symbol, then put
+    the argument in (mathlib/sympy_bridge.py::_call_user_function)."""
+
+    def test_wall_shear_stress(self):
+        assert last(PIPE + "τ_w = τ(R) | Pa\n") == r"\tau_{\text{w}} = \tau\left(R\right) = 0.04\,\mathrm{Pa}"
+
+    def test_derivative_keeps_sign_and_unit(self):
+        # -40 per second; shown as Hz until the 1/s display (C2) is decided
+        out = last(PIPE + "du(r) = diff(u(r), r)\ndu(R)\n")
+        assert out.split(" = ")[-1] in (r"-40\,\mathrm{Hz}", r"-40\,\frac{1}{\mathrm{s}}")
+
+    def test_parameter_as_variable_of_diff(self):
+        assert last("q(y) = diff(y^3, y)\nq(2)\n").endswith("= 12")
+
+    def test_parameter_as_bound_of_integrate(self):
+        assert last("F(b) = integrate(x^2, (x, 0, b))\nF(3)\n").endswith("= 9")
+
+    def test_parameter_as_variable_of_integrate(self):
+        assert last("A(x) = integrate(2*x, x)\nA(3)\n").endswith("= 9")
+
+    def test_parameter_as_variable_of_sum_and_lim(self):
+        assert last("H(k) = sum(k^2, (k, 1, 4))\nH(7)\n").endswith("= 30")
+        assert last("N(x) = lim(sin(x)/x, x, 0)\nN(5)\n").endswith("= 1")
+
+    def test_parameters_named_like_units(self):
+        code = "b = 4'm/s^2\nv(s) = diff(b*s^2/2, s)\nm(m) = diff(b*m^2, m)\n"
+        assert last(code + "v(3's)\n").endswith(r"= 12\,\frac{\mathrm{m}}{\mathrm{s}}")
+        assert last(code + "m(2's)\n").endswith(r"= 16\,\frac{\mathrm{m}}{\mathrm{s}}")
+
+    def test_function_calling_such_a_function(self):
+        assert last(PIPE + "τ2(r) = 2*τ(r)\nτ2(R) | Pa\n").endswith(r"= 0.08\,\mathrm{Pa}")
+
+    def test_plot(self):
+        code = PIPE + "plot(τ(r), r, 0, 0.01)\n"
+        assert [item for block in evaluate_code(code) for item in block][-1]["type"] == "plot"
+
+    def test_nsolve_in_the_body_keeps_working(self):
+        code = (
+            "k = 2'W/(m*K)\n"
+            "T_w(d) = nsolve(k*(x - 20'degC)/d - 500'W/m^2, x, 300'K)\n"
+            "T_w(0.1'm) | degC\n"
+        )
+        assert last(code).endswith(r"= 45\,^\circ\mathrm{C}")
+
+    @pytest.mark.parametrize("code, message", [
+        ("f(x) = diff(x^2, x) + 1'kg\nf(2'm)\n", "Cannot add/subtract incompatible units"),
+        ("g(x) = exp(diff(x^2, x))\ng(2'm)\n", "must be dimensionless"),
+    ])
+    def test_unit_checks_after_inserting_the_argument(self, code, message):
+        assert message in last(code)
+
+    def test_unknown_function_in_the_body_is_still_refused(self):
+        code = "w(x) = diff(unknownfn(x), x)\nplot(w(x), x, 0, 1)\n"
+        assert "Unknown function 'unknownfn'" in last(code)
+
+    def test_only_variables_of_calculus_take_the_new_way(self):
+        from mathlib.sympy_bridge import _calculus_variables
+
+        def variables(text):
+            return _calculus_variables(parse(text))
+
+        assert variables("-η*diff(u(r), r)") == {"r"}
+        assert variables("integrate(x^2, (x, 0, b))") == {"x"}
+        assert variables("lim(f(x), x, a)") == {"x"}
+        assert variables("nsolve(x - d, x, 1)") == frozenset()
+
+
 # ---------------------------------------------------------------------
 # Comparisons
 # ---------------------------------------------------------------------
@@ -369,8 +447,45 @@ class TestMinMaxRounding:
 
         from mathlib.functions import NUMERIC_FUNCTIONS, RESERVED_FUNCTION_NAMES
 
-        template = (Path(__file__).resolve().parent.parent / "templates" / "index.html").read_text(encoding="utf-8")
+        template = (Path(__file__).resolve().parent.parent / "templates" / "base.html").read_text(encoding="utf-8")  # toolbar: shared page
         names = set(re.findall(r"insertSnippet\('([A-Za-z_][A-Za-z_0-9]*)\(", template))
         assert {"min", "max", "round", "if"} <= names
         unknown = names - set(NUMERIC_FUNCTIONS) - RESERVED_FUNCTION_NAMES
         assert not unknown, unknown
+
+
+class TestSolveKeepsSymbolicSolutions:
+    """20.11.2026: solve() kept only solutions SymPy KNEW to be real.
+    With a variable without a value in the solution (F/m, sqrt(a)),
+    is_real is None, so every symbolic solution was dropped:
+    solve(Eq(F, m*a), a) gave []. Now only solutions that are certainly
+    not real are dropped (mathlib/solving.py); csolve keeps all."""
+
+    @pytest.mark.parametrize("code, expected", [
+        ("solve(Eq(F, m*a), a)\n", r"= \frac{F}{m}"),
+        ("solve(Eq(a*x, b), x)\n", r"= \frac{b}{a}"),
+        ("solve(Eq(x^2, a), x)\n", r"= \left[ - \sqrt{a}, \  \sqrt{a}\right]"),
+        ("solve([Eq(x + y, a), Eq(x - y, b)], [x, y])\n",
+         r"= \left\{ x : \frac{a}{2} + \frac{b}{2}, \  y : \frac{a}{2} - \frac{b}{2}\right\}"),
+    ])
+    def test_symbolic_solutions(self, code, expected):
+        assert last(code).endswith(expected)
+
+    def test_overshoot_time_of_a_step_response(self):
+        code = (
+            "h(t) = K*(1 - exp(-δ*t)*(cos(ω_d*t) + δ/ω_d*sin(ω_d*t)))\n"
+            "g_s = simplify(diff(h(t), t))\n"
+            "t_p = solve(Eq(g_s, 0), t)\n"
+            "t_max = t_p[2]\n"
+        )
+        assert r"\left[ 0, \  \frac{\pi}{" in items(code)[-2]
+        assert r"\pi" in last(code)
+
+    def test_numeric_cases_unchanged(self):
+        assert last("solve(Eq(x^2, 5), x)\n").endswith(r"= \left[ - \sqrt{5}, \  \sqrt{5}\right]")
+        assert last("solve(Eq(x^3, 1), x)\n").endswith("= 1")
+        assert last("m = 2'kg\nsolve(Eq(10'N, m*b), b)\n").endswith(r"= 5\,\frac{\mathrm{m}}{\mathrm{s}^{2}}")
+
+    def test_complex_solutions_only_with_csolve(self):
+        assert last("solve(Eq(x^2, -4), x)\n").endswith(r"= \left[ \right]")
+        assert last("csolve(Eq(x^2, -4), x)\n").endswith(r"= \left[ - 2 i, \  2 i\right]")

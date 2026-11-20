@@ -89,7 +89,7 @@ class TestBesselFunctions:
         # (mathlib/fluids.py, see tests/test_fluid_properties.py)
         assert set(_SPECIAL_FUNCTIONS) == names | {"engipad_fluid", "engipad_humid_air"}
 
-        template = (Path(__file__).resolve().parent.parent / "templates" / "index.html").read_text(encoding="utf-8")
+        template = (Path(__file__).resolve().parent.parent / "templates" / "base.html").read_text(encoding="utf-8")  # toolbar: shared page
         buttons = set(re.findall(r"insertSnippet\('([A-Za-z_][A-Za-z_0-9]*)\(", template))
         assert {"erf", "erfc", "besselj"} <= buttons
         assert not buttons - set(NUMERIC_FUNCTIONS) - RESERVED_FUNCTION_NAMES
@@ -194,3 +194,119 @@ class TestParenthesisAfterUnit:
     def test_unit_in_parentheses_is_unchanged(self):
         assert last("k = 5'W/(m*K)\n") == r"k = 5\,\frac{\mathrm{W}}{\mathrm{m}\,\mathrm{K}}"
         assert last("c = 4.18'kJ/(kg*K) | J/(kg*K)\n").endswith(r"4180\,\frac{\mathrm{J}}{\mathrm{kg}\,\mathrm{K}}")
+
+
+class TestReciprocalTargetUnit:
+    """B2 (20.11.2026): "| 1/s", "| 1/min", "| 1/K", "| 1/(m*K)" were
+    "Unknown desired unit": the unit grammar has no numbers. Now the
+    part after "1/" is read as a unit and inverted
+    (core/context.py::build_desired_unit)."""
+
+    @pytest.mark.parametrize("code, expected", [
+        ("x = 1/(2's) | 1/s\n", r"0.5\,\frac{1}{\mathrm{s}}"),
+        ("y = 3'rpm | 1/min\n", r"3\,\frac{1}{\mathrm{min}}"),
+        ("d = 1/(4'ms) | 1/s\n", r"250\,\frac{1}{\mathrm{s}}"),
+        ("β = 2e-4/(1'K) | 1/K\n", r"2\cdot 10^{-4}\,\frac{1}{\mathrm{K}}"),
+        ("k = 5/(1'm*1'K) | 1/(m*K)\n", r"5\,\frac{1}{\mathrm{m}\,\mathrm{K}}"),
+        ("w = 4/(1'm) | 1/mm\n", r"0.004\,\frac{1}{\mathrm{mm}}"),
+    ])
+    def test_values_and_display(self, code, expected):
+        assert last(code).endswith("= " + expected)
+
+    def test_power_form_still_works(self):
+        assert last("z = 1/(2's) | s^-1\n").endswith(r"= 0.5\,\mathrm{s}^{-1}")
+
+    def test_expansion_coefficient(self):
+        code = "β = 1.2e-5/(1'K) ; ΔT = 50'K ; L_0 = 2'm\nΔL = β*ΔT*L_0 | mm\nβ | 1/K\n"
+        assert last(code) == r"\beta = 1.2\cdot 10^{-5}\,\frac{1}{\mathrm{K}}"
+
+    def test_vector_and_comparison(self):
+        assert last("v = vec(2, 4)/(1's) | 1/min\n").endswith(r"\,\frac{1}{\mathrm{min}}")
+        out = last("a = 4/(1's)\na >= 3/(1's) | 1/s\n")
+        assert r"4\,\frac{1}{\mathrm{s}} \ge 3\,\frac{1}{\mathrm{s}}" in out
+
+    @pytest.mark.parametrize("code, message", [
+        ("L = 2'm\nL | 1/s\n", "the result has dimension [length], the unit [1/time]"),
+        ("y = 1/(2's) | 1/foo\n", "Unknown desired unit '1/foo'"),
+        ("y = 1/(2's) | 2/s\n", "Unknown desired unit '2/s'"),
+        ("y = 1/(2's) | 1/1/s\n", "Unknown desired unit '1/1/s'"),
+    ])
+    def test_errors(self, code, message):
+        assert message in last(code)
+
+
+class TestConstantPlot:
+    """20.11.2026: a formula without the plot variable gave ONE value
+    instead of one per point, and matplotlib refused to draw ("x and y
+    must have same first dimension"). Now a horizontal line
+    (mathlib/plotting.py::create_plot)."""
+
+    @pytest.fixture
+    def drawn(self, monkeypatch):
+        import matplotlib.axes
+
+        lines = []
+        original = matplotlib.axes.Axes.plot
+
+        def capture(self, xs, ys, *args, **kwargs):
+            lines.append((list(xs), list(ys)))
+            return original(self, xs, ys, *args, **kwargs)
+
+        monkeypatch.setattr(matplotlib.axes.Axes, "plot", capture)
+        return lines
+
+    @pytest.mark.parametrize("code, value", [
+        ("plot(1, x, 0, 1)\n", 1.0),
+        ("plot(0, x, 0, 1)\n", 0.0),
+        ("F = 3'kN\nplot(F, x, 0, 2)\n", 3000.0),
+        ("c(x) = 2.5\nplot(c(x), x, 0, 1)\n", 2.5),
+        ("plot(simplify(sin(x)^2 + cos(x)^2), x, 0, 1)\n", 1.0),
+    ])
+    def test_horizontal_line(self, drawn, code, value):
+        assert is_plot(code)
+        xs, ys = drawn[-1]
+        assert len(ys) == len(xs) == 400
+        assert all(y == pytest.approx(value) for y in ys)
+
+    def test_normal_plot_unchanged(self, drawn):
+        assert is_plot("plot(x^2, x, 0, 1)\n")
+        xs, ys = drawn[-1]
+        assert ys[-1] == pytest.approx(1.0) and ys[0] == pytest.approx(0.0)
+
+
+FILM = (
+    "λ = 0.68'W/(m*K) ; Δϑ = 10'K ; ν_l = 0.29e-6'm^2/s\n"
+    "Δh_v = 2257'kJ/kg ; g = 9.81'm/s^2 ; ρ_l = 958'kg/m^3 ; ρ_g = 0.6'kg/m^3 ; x_2 = 0.1'm\n"
+)
+
+
+class TestDecimalExponentOfAQuantity:
+    """20.11.2026 (reported by the user): "(...)^(0.25) | mm" failed with
+    "the result has dimension [length**1.0], the unit [length]" while
+    "^(1/4)" worked. SymPy turned m^4 ^ 0.25 into the unit meter**1.0, a
+    different unit than meter, so "| unit", additions and comparisons
+    failed. A decimal exponent on a base WITH a unit is now made exact
+    (mathlib/sympy_bridge.py::_exact_exponent_for_units)."""
+
+    def test_condensate_film_thickness(self):
+        quarter = last(FILM + "δ_2=((4*λ*Δϑ*ν_l/(Δh_v*g*(ρ_l-ρ_g)))*x_2)^(1/4)|mm\n")
+        decimal = last(FILM + "δ_2=((4*λ*Δϑ*ν_l/(Δh_v*g*(ρ_l-ρ_g)))*x_2)^(0.25)|mm\n")
+        assert quarter.endswith(r"= 0.078103\,\mathrm{mm}")
+        assert decimal.endswith(r"= 0.078103\,\mathrm{mm}")
+        assert r"^{0.25}" in decimal  # the input is shown as typed
+
+    @pytest.mark.parametrize("code, expected", [
+        ("b = (16'm^4)^0.25 | mm\n", r"= 2000\,\mathrm{mm}"),
+        ("c = (4'm^2)^0.5 | m\n", r"= 2\,\mathrm{m}"),
+        ("h = (2'm)^2.0 | m^2\n", r"= 4\,\mathrm{m}^2"),
+        ("a = (16'm^4)^0.25 + 1'm\n", r"= 3\,\mathrm{m}"),
+        ("b = (16'm^4)^0.25\nc = b + 1'm\n", r"= 3\,\mathrm{m}"),
+        ("(16'm^4)^0.25 <= 3'm\n", r"\;\Rightarrow\; \text{true}"),
+        ("n = 0.25\nd = (16'm^4)^n | mm\n", r"= 2000\,\mathrm{mm}"),
+    ])
+    def test_unit_is_exact(self, code, expected):
+        assert last(code).endswith(expected)
+
+    def test_bases_without_a_unit_unchanged(self):
+        assert last("x = 2^0.5\n") == r"x = 2^{0.5} = 1.4142"
+        assert last("y = z^0.5\n") == r"y = z^{0.5} = z^{0.5}"

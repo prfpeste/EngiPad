@@ -217,6 +217,6 @@ class TestFixedFunctionTables:
     def test_toolbar_snippets(self):
         from pathlib import Path
 
-        template = (Path(__file__).resolve().parent.parent / "templates" / "index.html").read_text(encoding="utf-8")
+        template = (Path(__file__).resolve().parent.parent / "templates" / "base.html").read_text(encoding="utf-8")  # toolbar: shared page
         assert "insertSnippet('prop( , T, , p, , Water)'" in template
         assert "insertSnippet('haprop( , T, , p, , φ, )'" in template

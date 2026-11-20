@@ -1,0 +1,12 @@
+{#- Web version (Python in the browser with Pyodide, web/engipad_web.py):
+    nothing is sent to a server. static/web/web_shell.js runs the
+    calculations in a web worker and shows the loading state in the
+    status line; the LaTeX export is made in the browser and downloaded.
+    No Quit button. Shared page: templates/base.html. -#}
+{% extends "base.html" %}
+{% block export_button %}          <button type="button" class="tool-btn" id="export-btn" data-icon="export" title="LaTeX export (.tex, or .zip if it includes plots or images)"></button>
+{% endblock %}
+{% block built_with %}Python (Pyodide), SymPy{% endblock %}
+{% block result_status %}      <div class="web-status" id="web-status" role="status" aria-live="polite">Loading Python ...</div>
+{% endblock %}
+{% block shell_scripts %}  <script src="{{ url_for('static', filename='web/web_shell.js') }}?v=3"></script>{% endblock %}

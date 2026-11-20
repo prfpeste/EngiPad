@@ -8,6 +8,7 @@
     matrices are shown rounded, with their unit(s), and accept "| unit"
 """
 
+import math
 import time
 
 import pytest
@@ -285,6 +286,59 @@ class TestVariablesNamedLikeUnits:
         assert last("I = 3'A\nR =: nsolve(Eq(A*I, 12'V), A, 1'Ohm) | Ohm\n") == r"R = 4\,\mathrm{\Omega}"
 
 
+def _magnitude(latex, unit):
+    """Number in front of "\\,<unit>" in a result line."""
+    head = latex.split(" = ")[-1]
+    assert head.endswith(unit), latex
+    return float(head[: -len(unit)])
+
+
+class TestNsolveSmallStartValues:
+    """A1 (20.11.2026): with ONE start value mpmath's secant method takes
+    x0 + 0.25 as second point, a fixed step in SI base units. For unknowns
+    that are small in SI (cm, mV, uF) that point lies where the function is
+    flat, and nsolve reported "Could not find root". _solve_one() now gives
+    a second point 0.1 % next to the start value."""
+
+    def test_heat_conduction_depth_in_cm(self):
+        code = (
+            "a = 0.69'mm^2/s ; T_S = 80'degC ; T_0 = 20'degC\n"
+            "z_1 =: nsolve(T_S - (T_S - T_0)*erf(z/(2*sqrt(a*1'h))) - 30'degC, z, 5'cm)\n"
+        )
+        assert _magnitude(last(code), r"\,\mathrm{m}") == pytest.approx(0.09748, rel=1e-3)
+
+    def test_start_value_in_millivolt(self):
+        code = (
+            "U_T = 25.85'mV ; I_S = 1e-12'A\n"
+            "u_D =: nsolve(I_S*(exp(u/U_T) - 1) - 1'mA, u, 500'mV) | mV\n"
+        )
+        expected = 25.85 * math.log(1e-3 / 1e-12 + 1)
+        assert _magnitude(last(code), r"\,\mathrm{mV}") == pytest.approx(expected, rel=1e-4)
+
+    def test_start_value_in_microfarad(self):
+        code = (
+            "U_0 = 5'V ; R = 1'kOhm ; t = 1'ms\n"
+            "C_1 =: nsolve(U_0*exp(-t/(R*C_x)) - 1.84'V, C_x, 2'uF) | uF\n"
+        )
+        expected = 1 / math.log(5 / 1.84)
+        assert _magnitude(last(code), r"\,\mu\mathrm{F}") == pytest.approx(expected, rel=1e-4)
+
+    def test_start_value_zero_keeps_the_default_step(self):
+        assert last("r =: nsolve(x^2 - 2, x, 0)\n") == "r = 1.4142"
+
+    def test_negative_start_value(self):
+        assert _magnitude(last("z_2 =: nsolve(z^3 + 8'cm^3, z, -1'cm) | cm\n"), r"\,\mathrm{cm}") == pytest.approx(-2, rel=1e-6)
+
+    def test_second_start_point(self):
+        from mathlib.functions import _secant_start
+
+        assert _secant_start(0) == 0
+        assert _secant_start(sp.Integer(0)) == 0
+        first, second = _secant_start(sp.Float("0.05"))
+        assert first == sp.Float("0.05")
+        assert float(second) == pytest.approx(0.05005)
+
+
 class TestFunctionNamesAsPlainVariables:
     def test_name_of_a_builtin_function_without_a_value_is_a_variable(self):
         # "T" is also transpose(); without a value it used to resolve to
@@ -307,6 +361,6 @@ class TestWhitelistAndToolbar:
     def test_toolbar_has_the_new_snippets(self):
         from pathlib import Path
 
-        template = (Path(__file__).resolve().parent.parent / "templates" / "index.html").read_text(encoding="utf-8")
+        template = (Path(__file__).resolve().parent.parent / "templates" / "base.html").read_text(encoding="utf-8")  # toolbar: shared page
         for snippet in ("nintegrate( , (x, , ))", "interp( , , )", "interp2( , , , , )"):
             assert f"insertSnippet('{snippet}'" in template
