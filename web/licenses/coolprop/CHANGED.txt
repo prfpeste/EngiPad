@@ -1,0 +1,6 @@
+
+Note: the file CoolProp/CoolProp.so of this package was changed by
+tools/wasm_bsymbolic.mjs of EngiPad (calls of the library to its own
+functions are linked directly, as with the linker option -Bsymbolic;
+nothing else is changed). Without it, loading the fluid library takes
+about 70 s in a browser instead of a few seconds.

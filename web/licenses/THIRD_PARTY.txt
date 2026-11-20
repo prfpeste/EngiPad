@@ -1,0 +1,26 @@
+Third-party software included in the EngiPad web version
+
+Package              Version        Licence
+-------------------- -------------- ------------------------------
+Pyodide              314.0.8        MPL-2.0 (see Pyodide/NOTICE.txt)
+CPython              3.14.2         PSF-2.0 (part of Pyodide)
+mpmath               1.4.1          BSD-3-Clause
+sympy                1.14.0         BSD
+markupsafe           3.0.3          BSD-3-Clause
+jinja2               3.1.6          BSD License
+six                  1.17.0         MIT
+cycler               0.12.1         Copyright (c) 2015, matplotlib project
+fonttools            4.62.1         MIT
+packaging            26.1           Apache-2.0 OR BSD-2-Clause
+pyparsing            3.3.2          MIT
+python-dateutil      2.9.0.post0    Dual License
+pytz                 2026.1.post1   MIT
+numpy                2.4.6          BSD-3-Clause AND 0BSD AND MIT AND Zlib AND CC0-1.0
+kiwisolver           1.5.0          =========================
+pillow               12.2.0         MIT-CMU
+contourpy            1.3.3          BSD 3-Clause License
+matplotlib           3.10.8         License agreement for matplotlib versions 1.3.0 and later
+coolprop             7.2.0          MIT
+
+MathJax and the fonts Inter and JetBrains Mono: see static/vendor/ (each with its licence file).
+EngiPad itself: GNU General Public License v3.0 (GPL-3.0), https://github.com/prfpeste/EngiPad
