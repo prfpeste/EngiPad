@@ -1,0 +1,378 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>EngiPad</title>
+  <link rel="icon" type="image/png" href="static/favicon.png?v=2">
+
+  <!-- MathJax configuration -->
+  <script>
+    window.MathJax = {
+      // The html extension provides \class{...}{...}, used by the
+      // \engiunit macro below.
+      // Comments are escaped for pdflatex (mathlib/units.py::
+      // make_safe_text_latex) and typeset by MathJax as well:
+      // - textmacros: makes \text{...} understand \_ \% \# \& \$ \{ \}
+      // - unicode + the three macros below: \textbackslash,
+      //   \textasciicircum, \textasciitilde are unknown to MathJax.
+      loader: {load: ['[tex]/html', '[tex]/textmacros', '[tex]/unicode']},
+      tex: {
+        inlineMath: [['$', '$'], ['\\(', '\\)']],
+        packages: {'[+]': ['html', 'textmacros', 'unicode']},
+        // Sheet prefixes ("S1::" of S1::L) are emitted as \engisheet{...}
+        // (mathlib/units.py::wrap_sheet_prefix_latex()), sized by the
+        // "Sheet prefix size" setting (static/main.css, .engi-sheet).
+        // Units are emitted as \engiunit{...} by the Python side
+        // (mathlib/units.py::wrap_unit_latex()); the size is set in
+        // static/main.css (.engi-unit), driven by the "Unit font size" setting.
+        // The Jinja raw block around the macros line is needed: the
+        // character pair brace+hash would otherwise start a Jinja comment.
+        macros: {engiunit: ['\\class{engi-unit}{#1}', 1],
+                 engisheet: ['\\class{engi-sheet}{#1}', 1],
+                 textbackslash: '$\\unicode{x5C}$',
+                 textasciicircum: '$\\unicode{x5E}$',
+                 textasciitilde: '$\\unicode{x7E}$'}
+      },
+      chtml: {
+        displayAlign: 'left',
+        displayIndent: '0em'
+      }
+    };
+  </script>
+  <!-- MathJax and the web fonts are served by EngiPad itself (static/vendor):
+       no request leaves for a CDN or a font service, and the program works
+       without an internet connection. MathJax finds its extensions and fonts
+       relative to this script. -->
+  <script src="static/vendor/mathjax/tex-chtml.js"></script>
+
+  <link rel="stylesheet" href="static/vendor/fonts/fonts.css">
+
+  <link rel="stylesheet" href="static/main.css?v=11">
+</head>
+<body>
+  
+  <div class="app">
+
+    <!-- ===================== INPUT ===================== -->
+    <section class="col col-input">
+      <header class="col-header">
+        <span class="col-title">Input</span>
+
+        <div class="toolbar">
+          <input type="file" id="file-input" accept=".txt,.calc,.dat,.cfg,*/*" style="display:none" />
+
+          <button type="button" class="tool-btn" id="new-calc-btn" data-icon="new_file" title="New calculation (empty sheet)"></button>
+          <button type="button" class="tool-btn" data-icon="open" title="Open file" onclick="document.getElementById('file-input').click();"></button>
+          <button type="button" class="tool-btn" data-icon="save" title="Save" onclick="saveFile();"></button>
+
+          <span class="tool-divider"></span>
+
+          <button type="button" class="tool-btn" id="undo-btn" data-icon="undo" title="Undo (Ctrl+Z)" disabled></button>
+          <button type="button" class="tool-btn" id="redo-btn" data-icon="redo" title="Redo (Ctrl+Y)" disabled></button>
+
+          <span class="tool-divider"></span>
+
+          <button type="submit" form="calc-form" class="tool-btn" data-icon="calc" title="Calculate"></button>
+
+          <span class="tool-divider"></span><div class="dropdown" data-dropdown data-collapsible>
+            <button type="button" class="tool-btn" data-icon="greek" title="Greek letters &amp; symbols" data-trigger></button>
+            <div class="dropdown-panel" data-panel>
+              <p class="panel-title">Greek letters &amp; symbols</p>
+              <div class="chip-grid">
+                <button type="button" onclick="insertSymbol('α');">α</button>
+                <button type="button" onclick="insertSymbol('β');">β</button>
+                <button type="button" onclick="insertSymbol('γ');">γ</button>
+                <button type="button" onclick="insertSymbol('δ');">δ</button>
+                <button type="button" onclick="insertSymbol('ε');">ε</button>
+                <button type="button" onclick="insertSymbol('ζ');">ζ</button>
+                <button type="button" onclick="insertSymbol('η');">η</button>
+                <button type="button" onclick="insertSymbol('ϑ');">ϑ</button>
+                <button type="button" onclick="insertSymbol('ι');">ι</button>
+                <button type="button" onclick="insertSymbol('κ');">κ</button>
+                <button type="button" onclick="insertSymbol('λ');">λ</button>
+                <button type="button" onclick="insertSymbol('μ');">μ</button>
+                <button type="button" onclick="insertSymbol('ν');">ν</button>
+                <button type="button" onclick="insertSymbol('ξ');">ξ</button>
+                <button type="button" onclick="insertSymbol('π');">π</button>
+                <button type="button" onclick="insertSymbol('ρ');">ρ</button>
+                <button type="button" onclick="insertSymbol('σ');">σ</button>
+                <button type="button" onclick="insertSymbol('τ');">τ</button>
+                <button type="button" onclick="insertSymbol('υ');">υ</button>
+                <button type="button" onclick="insertSymbol('φ');">φ</button>
+                <button type="button" onclick="insertSymbol('χ');">χ</button>
+                <button type="button" onclick="insertSymbol('ψ');">ψ</button>
+                <button type="button" onclick="insertSymbol('ω');">ω</button>
+                <button type="button" onclick="insertSymbol('Γ');">Γ</button>
+                <button type="button" onclick="insertSymbol('Δ');">Δ</button>
+                <button type="button" onclick="insertSymbol('Λ');">Λ</button>
+                <button type="button" onclick="insertSymbol('Θ');">Θ</button>
+                <button type="button" onclick="insertSymbol('Ξ');">Ξ</button>
+                <button type="button" onclick="insertSymbol('Π');">Π</button>
+                <button type="button" onclick="insertSymbol('Σ');">Σ</button>
+                <button type="button" onclick="insertSymbol('Φ');">Φ</button>
+                <button type="button" onclick="insertSymbol('Ψ');">Ψ</button>
+                <button type="button" onclick="insertSymbol('Ω');">Ω</button>
+                <button type="button" onclick="insertSymbol('∞');">∞</button>
+                <button type="button" onclick="insertSymbol('ⅈ');">ⅈ</button>
+                <button type="button" onclick="insertSymbol('≤');">≤</button>
+                <button type="button" onclick="insertSymbol('≥');">≥</button>
+                <button type="button" onclick="insertSymbol('≠');">≠</button>
+              </div>
+            </div>
+          </div>
+
+          <div class="dropdown" data-dropdown data-collapsible>
+            <button type="button" class="tool-btn" data-icon="math_func" title="Functions (root, sin, cos, ...)" data-trigger></button>
+            <div class="dropdown-panel" data-panel>
+              <p class="panel-title">Functions</p>
+              <div class="chip-grid">
+                <button type="button" onclick="insertSnippet('^()', 1);" title="Power: type the base, then this button, then the exponent">xʸ</button>
+                <button type="button" onclick="insertSnippet('sqrt()', 1);">√x</button>
+                <button type="button" onclick="insertSnippet('abs()', 1);">|x|</button>
+                <button type="button" onclick="insertSnippet('exp()', 1);">exp(x)</button>
+                <button type="button" onclick="insertSnippet('ln()', 1);">ln(x)</button>
+                <button type="button" onclick="insertSnippet('log()', 1);">log(x)</button>
+                <button type="button" onclick="insertSnippet('sin()', 1);">sin(x)</button>
+                <button type="button" onclick="insertSnippet('cos()', 1);">cos(x)</button>
+                <button type="button" onclick="insertSnippet('tan()', 1);">tan(x)</button>
+                <button type="button" onclick="insertSnippet('asin()', 1);">asin(x)</button>
+                <button type="button" onclick="insertSnippet('acos()', 1);">acos(x)</button>
+                <button type="button" onclick="insertSnippet('atan()', 1);">atan(x)</button>
+                <button type="button" onclick="insertSnippet('atan2()', 1);">atan2(x)</button>
+                <button type="button" onclick="insertSnippet('sinh()', 1);">sinh(x)</button>
+                <button type="button" onclick="insertSnippet('cosh()', 1);">cosh(x)</button>
+                <button type="button" onclick="insertSnippet('tanh()', 1);">tanh(x)</button>
+                <button type="button" onclick="insertSnippet('asinh()', 1);">asinh(x)</button>
+                <button type="button" onclick="insertSnippet('acosh()', 1);">acosh(x)</button>
+                <button type="button" onclick="insertSnippet('atanh()', 1);">atanh(x)</button>
+                <button type="button" onclick="insertSnippet('erf()', 1);">erf</button>
+                <button type="button" onclick="insertSnippet('erfc()', 1);">erfc</button>
+                <button type="button" onclick="insertSnippet('besselj(0, )', 1);">J₀</button>
+                <button type="button" onclick="insertSnippet('prop( , T, , p, , Water)', 19);">prop</button>
+                <button type="button" onclick="insertSnippet('haprop( , T, , p, , φ, )', 17);">haprop</button>
+                <button type="button" onclick="insertSnippet('min( , )', 4);">min</button>
+                <button type="button" onclick="insertSnippet('max( , )', 4);">max</button>
+                <button type="button" onclick="insertSnippet('round()', 1);">round</button>
+                <button type="button" onclick="insertSnippet('floor()', 1);">floor</button>
+                <button type="button" onclick="insertSnippet('ceil()', 1);">ceil</button>
+                <button type="button" onclick="insertSnippet('sign()', 1);">sign</button>
+                <button type="button" onclick="insertSnippet('if( , , )', 6);">if</button>
+              </div>
+            </div>
+          </div>
+
+          <div class="dropdown" data-dropdown data-collapsible>
+            <button type="button" class="tool-btn" data-icon="solve_equ" title="Equation solver, derivatives/integrals, sums" data-trigger></button>
+            <div class="dropdown-panel" data-panel>
+              <p class="panel-title">Equations &amp; calculus</p>
+              <div class="chip-grid">
+                <button type="button" onclick="insertSnippet('diff( , x)', 5);">diff</button>
+                <button type="button" onclick="insertSnippet('integrate( , (x, , ))', 11);">∫ integrate</button>
+                <button type="button" onclick="insertSnippet('nintegrate( , (x, , ))', 11);">∫ numeric</button>
+                <button type="button" onclick="insertSnippet('Eq( , )', 4);">Eq(…)</button>
+                <button type="button" onclick="insertSnippet('solve(Eq( , ),  )', 11);">solve</button>
+                <button type="button" onclick="insertSnippet('csolve(Eq( , ),  )', 11);">csolve</button>
+                <button type="button" onclick="insertSnippet('nsolve(( ),( ),( ))', 11);">nsolve</button>
+                <button type="button" onclick="insertSnippet('sum(i,(i,0,n))', 10);">sum</button>
+                <button type="button" onclick="insertSnippet('prod(i,(i,0,n))', 10);">prod</button>
+                <button type="button" onclick="insertSnippet('lim(x,x,0)', 6);">lim</button>
+                <button type="button" onclick="insertSnippet('simplify()', 1);">simplify</button>
+                <button type="button" onclick="insertSnippet('expand()', 1);">expand</button>
+                <button type="button" onclick="insertSnippet('factor()', 1);">factor</button>
+                <button type="button" onclick="insertSnippet('assume( > 0)', 5);">assume</button>
+              </div>
+            </div>
+          </div>
+
+          <div class="dropdown" data-dropdown data-collapsible>
+            <button type="button" class="tool-btn" data-icon="matrix" title="Matrices &amp; vectors" data-trigger></button>
+            <div class="dropdown-panel" data-panel>
+              <p class="panel-title">Matrices &amp; vectors</p>
+              <div class="chip-grid">
+                <button type="button" onclick="insertSnippet('vec()', 1);">vec</button>
+                <button type="button" onclick="insertSnippet('mat([[]])', 3);">mat</button>
+                <button type="button" onclick="insertSnippet('Matrix([[]])', 3);">Matrix</button>
+                <button type="button" onclick="insertSnippet('det()', 1);">det</button>
+                <button type="button" onclick="insertSnippet('inv()', 1);">inv</button>
+                <button type="button" onclick="insertSnippet('T()', 1);">T</button>
+                <button type="button" onclick="insertSnippet('trace()', 1);">trace</button>
+                <button type="button" onclick="insertSnippet('rank()', 1);">rank</button>
+                <button type="button" onclick="insertSnippet('dot(, )', 3);">dot</button>
+                <button type="button" onclick="insertSnippet('cross(, )', 3);">cross</button>
+                <button type="button" onclick="insertSnippet('norm()', 1);">norm</button>
+                <button type="button" onclick="insertSnippet('eye()', 1);">eye</button>
+                <button type="button" onclick="insertSnippet('zeros(, )', 3);">zeros</button>
+                <button type="button" onclick="insertSnippet('solve_linear(, )', 3);">solve_linear</button>
+                <button type="button" onclick="insertSnippet('eigenvals()', 1);">eigenvals</button>
+                <button type="button" onclick="insertSnippet('eigenvects()', 1);">eigenvects</button>
+                <button type="button" onclick="insertSnippet('interp( , , )', 6);">interp</button>
+                <button type="button" onclick="insertSnippet('interp2( , , , , )', 10);">interp2</button>
+              </div>
+            </div>
+          </div>
+
+          <div class="dropdown" data-dropdown data-collapsible>
+            <button type="button" class="tool-btn" data-icon="plot" title="Plot" data-trigger></button>
+            <div class="dropdown-panel" data-panel>
+              <p class="panel-title">Plot</p>
+              <div class="chip-grid">
+                <button type="button" onclick="insertSnippet('plot( , x, -5, 5)', 12);">2D plot</button>
+              </div>
+            </div>
+          </div>
+
+          <input type="file" id="image-input" accept="image/png" style="display:none" />
+          <button type="button" class="tool-btn" id="image-btn" data-icon="image_plus" title="Insert image (PNG)" data-collapsible></button>
+
+          <span class="tool-divider"></span>
+
+          <div class="dropdown" data-dropdown data-collapsible>
+            <button type="button" class="tool-btn" data-icon="settings" title="Settings" data-trigger></button>
+            <div class="dropdown-panel" data-panel>
+              <p class="panel-title">Settings</p>
+              <label class="setting-row" for="precision-input">
+                <span>Rounding precision</span>
+                <span class="setting-control">
+                  <input type="text" inputmode="decimal" id="precision-input" name="precision" form="calc-form" value="0.01">
+                  <span class="setting-suffix">%</span>
+                </span>
+              </label>
+              <label class="setting-row" for="fontsize-input">
+                <span>Font size</span>
+                <span class="setting-control">
+                  <input type="text" inputmode="numeric" id="fontsize-input" name="font_size" form="calc-form" value="14">
+                  <span class="setting-suffix">px</span>
+                </span>
+              </label>
+              <label class="setting-row" for="unitfontsize-input">
+                <span>Unit font size</span>
+                <span class="setting-control">
+                  <input type="text" inputmode="numeric" id="unitfontsize-input" name="unit_font_size" form="calc-form" value="80">
+                  <span class="setting-suffix">%</span>
+                </span>
+              </label>
+              <label class="setting-row" for="sheetfontsize-input" title="Size of the sheet name in references to other sheets (S1::L)">
+                <span>Sheet prefix size</span>
+                <span class="setting-control">
+                  <input type="text" inputmode="numeric" id="sheetfontsize-input" name="sheet_font_size" form="calc-form" value="50">
+                  <span class="setting-suffix">%</span>
+                </span>
+              </label>
+              <label class="setting-row" for="all-sheets-toggle" title="Off: print and LaTeX export contain the sheet that is shown. On: all sheets, each starting on a new page.">
+                <span>Print/export all sheets</span>
+                <span class="setting-control">
+                  <input type="checkbox" id="all-sheets-toggle" name="all_sheets" value="1" form="calc-form" style="width: 16px; height: 16px;">
+                </span>
+              </label>
+              <label class="setting-row" for="timeout-input" title="Maximum computation time (1-30 s)">
+                <span>Timeout</span>
+                <span class="setting-control">
+                  <input type="text" inputmode="numeric" id="timeout-input" name="timeout" form="calc-form" value="10">
+                  <span class="setting-suffix">s</span>
+                </span>
+              </label>
+              <label class="setting-row" for="image-limit-select" title="Total size of all images in the file (1-3 MB). A single image may use a fifth of it.">
+                <span>Image limit</span>
+                <span class="setting-control">
+                  <select id="image-limit-select" name="image_limit" form="calc-form">
+                    
+                    <option value="1" selected>1 MB</option>
+                    
+                    <option value="2">2 MB</option>
+                    
+                    <option value="3">3 MB</option>
+                    
+                  </select>
+                </span>
+              </label>
+              <label class="setting-row" for="live-update-toggle" title="Off: results update only with the Calculate button (or Ctrl+Enter). On: results update after every Enter.">
+                <span>Live update (on Enter)</span>
+                <span class="setting-control">
+                  <input type="checkbox" id="live-update-toggle" data-default="1" style="width: 16px; height: 16px;">
+                </span>
+              </label>
+            </div>
+          </div>
+
+          <div class="dropdown toolbar-more" data-dropdown data-toolbar-more hidden>
+            <button type="button" class="tool-btn" data-icon="menu" title="More" data-trigger></button>
+            <div class="dropdown-panel toolbar-more-panel" data-panel></div>
+          </div>
+        </div>
+      </header>
+
+      <form id="calc-form" class="editor-wrap" style="font-size: 14px;">
+        <!-- The textarea shows ONE sheet (static/editor.js); the whole
+             workbook (all sheets as one text) travels in the hidden field. -->
+        <textarea id="code-textarea" spellcheck="false" data-active=""></textarea>
+        <input type="hidden" name="code" id="workbook-field" value="">
+        <input type="hidden" name="active_sheet" id="active-sheet-field" value="">
+        <!-- Names of the loaded images (the images themselves stay in the
+             browser); "images" (Base64 data) is only filled for the LaTeX export. -->
+        <input type="hidden" name="image_names" id="image-names-field" value="">
+        <input type="hidden" name="images" id="export-images-field" value="">
+      </form>
+
+      <div class="sheet-bar" id="sheet-bar">
+        <button type="button" class="tool-btn" id="new-sheet-btn" data-icon="new_sheet" title="New sheet"></button>
+        <div class="sheet-tabs" id="sheet-tabs"></div>
+      </div>
+    </section>
+
+    <!-- ===================== RESULT ===================== -->
+    <section class="col col-result">
+      <header class="col-header">
+        <span class="col-title">Result</span>
+
+        <div class="toolbar">
+          <button type="button" class="tool-btn" data-icon="print" title="Print / save as PDF" onclick="window.print();"></button>
+          <button type="button" class="tool-btn" id="export-btn" data-icon="export" title="LaTeX export (.tex, or .zip if it includes plots or images)"></button>
+
+          <div class="dropdown" data-dropdown>
+            <button type="button" class="tool-btn" data-icon="info" title="Info" data-trigger></button>
+            <div class="dropdown-panel" data-panel>
+              <p class="panel-title">EngiPad</p>
+              <dl class="info-list">
+                <dt>Version</dt><dd>1.1.6.1</dd>
+                <dt>Author</dt><dd>Prof. Dr. Peter Stein</dd>
+                <dt>Built with</dt><dd>Python (Pyodide), SymPy</dd>
+                <dt>Coding</dt><dd>Claude (Anthropic) </dd>
+              </dl>
+            </div>
+          </div>
+
+        </div>
+      </header>
+      <div class="web-status" id="web-status" role="status" aria-live="polite">Loading Python ...</div>
+
+      <div class="output-wrap">
+        <!-- print-frame: on screen invisible wrapper (display: contents);
+             when printing, its header row (the sheet name) repeats on every page. -->
+        <table class="print-frame">
+          <thead class="print-head is-empty"><tr><th id="print-sheet-title"></th></tr></thead>
+          <tbody><tr><td>
+            <div class="output-container" style="font-size: 14px; --unit-scale: 80%; --sheet-scale: 50%;">
+              
+    
+  
+            </div>
+          </td></tr></tbody>
+        </table>
+
+        <!-- Only used for printing ALL sheets; typeset on demand
+             (tex2jax_ignore keeps MathJax from doing it up front). -->
+        <div class="print-sheets tex2jax_ignore" id="print-sheets" style="font-size: 14px; --unit-scale: 80%; --sheet-scale: 50%;">
+          
+        </div>
+      </div>
+    </section>
+
+  </div>
+
+  <script>window.ENGIPAD_IMAGES = {"defaultAlignment": "center", "defaultDisplayWidth": 500, "hardTotalBytes": 3145728, "maxImages": 10, "maxPixelHeight": 4000, "maxPixelWidth": 1200, "maxPixels": 3000000, "nameMaxLength": 40, "perImageDivisor": 5};</script>
+  <script src="static/pictures.js?v=1"></script>
+  <script src="static/web/web_shell.js?v=3"></script>
+  <script src="static/editor.js?v=7"></script>
+</body>
+</html>
