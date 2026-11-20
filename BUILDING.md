@@ -24,7 +24,7 @@ Builds `EngiPad-x86_64.AppImage` (about 51 MB). On first start it adds a menu en
 build-windows.bat console
 ```
 
-Builds `dist\EngiPad\EngiPad.exe` with icon. Use the argument `console` for the first run so errors are visible; without it the exe has no console window. If [Inno Setup 6](https://jrsoftware.org/isinfo.php) is installed, `EngiPad.iss` is compiled too and produces `installer\EngiPad-Setup.exe` (per-user installation, no admin rights required). The version number is set in `EngiPad.iss` (`AppVersion`) and in `templates/index.html` – change both for a new release. The files are not code-signed, so Windows SmartScreen shows "unknown publisher".
+Builds `dist\EngiPad\EngiPad.exe` with icon. Use the argument `console` for the first run so errors are visible; without it the exe has no console window. If [Inno Setup 6](https://jrsoftware.org/isinfo.php) is installed, `EngiPad.iss` is compiled too and produces `installer\EngiPad-Setup.exe` (per-user installation, no admin rights required). The version number is set in `EngiPad.iss` (`AppVersion`) and in `templates/base.html` – change both for a new release. The files are not code-signed, so Windows SmartScreen shows "unknown publisher".
 
 **Distribute the installer (`EngiPad-Setup.exe`) or the complete `dist\EngiPad` folder, never `EngiPad.exe` alone.** The build is a folder build: the exe needs the `_internal` folder next to it (it contains `python3xx.dll`). A bare exe fails with "Failed to load Python DLL". Antivirus or AppLocker rules can cause the same message; then check whether `_internal\python3xx.dll` still exists.
 

@@ -34,19 +34,26 @@ EngiPad is a calculation notebook for engineers. You type formulas in a plain te
 
 | Button | Function |
 |---|---|
+| New calculation | Start again with one empty sheet; see below |
 | Open | Load a text file into the editor |
 | Save | Download the editor content as a text file |
 | Undo / Redo | Take back or restore your last changes (also `Ctrl+Z` / `Ctrl+Y`); see below |
+| Calculate | Evaluate the input (also `Ctrl+Enter`) |
 | Greek | Insert Greek letters and symbols |
-| Functions | Insert snippets for `sqrt`, `sin`, `cos`, `log`, `erf`, `erfc`, `prop`, `haprop`, `min`, `max`, `round`, `if`, … |
-| Equations & calculus | Insert `diff`, `integrate`, `nintegrate`, `Eq`, `solve`, `sum`, `prod`, `lim`, … |
+| Functions | Insert snippets for the power `x^y` (button xʸ), `sqrt`, `sin`, `cos`, `log`, `erf`, `erfc`, `prop`, `haprop`, `min`, `max`, `round`, `if`, … |
+| Equations & calculus | Insert `diff`, `integrate`, `nintegrate`, `Eq`, `solve`, `sum`, `prod`, `lim`, `simplify`, `expand`, `factor`, `assume`, … |
 | Matrices & vectors | Insert matrix and vector snippets, `interp`, `interp2` |
 | Plot | Insert a `plot(...)` snippet |
 | Insert image | Add a PNG picture and insert its `picture(...)` line (see [Pictures](#9-pictures)) |
 | Settings | Rounding, font sizes, timeout, image limit, live update, … (see [Settings](#14-settings)) |
-| Calculate | Evaluate the input |
 
-**Undo and redo.** The two arrow buttons (between *Save* and *Greek*) work on the whole file: typing, inserted snippets and pictures, and also adding, deleting and renaming sheets (including the rewritten `Sheet::var` references). They are greyed out when there is nothing to undo or redo. Typing is grouped into sensible steps: a short pause, Enter, pasting, cutting or switching between typing and deleting starts a new step. Switching sheets is not a step; undo shows the sheet in which the change happened. On the keyboard use `Ctrl+Z` for undo and `Ctrl+Y` or `Ctrl+Shift+Z` for redo (`Cmd` on a Mac). Up to 200 steps are kept. The history is not saved in the file; it starts empty after *Open*. It survives *Calculate* and a page reload within the same browser tab, but not closing the tab. A picture stays loaded when its line is undone, so redo brings it back.
+**When the toolbar is too narrow** (a small window, or EngiPad embedded in a narrow page such as a Moodle question), the buttons that no longer fit move, starting from the right, into a menu: the button with three lines (☰) at the right end of the toolbar. Click it to see them one below the other; a button that opens a menu (Greek, Functions, Settings, …) opens it next to the list. *New calculation*, *Open*, *Save*, *Undo*, *Redo* and *Calculate* always stay in the toolbar. When there is room again, the buttons move back.
+
+**New calculation.** The first button replaces the whole file (all sheets) by one empty sheet and clears the output. If the editor is not empty, EngiPad asks first. *Undo* brings the previous calculation back. Not to be confused with *New sheet* below the editor, which adds a sheet to the file (see [Worksheets](#12-worksheets-several-sheets-in-one-file)).
+
+**Automatic backup.** EngiPad starts with an empty sheet. Your input (including pictures, as far as the browser storage allows) is kept in the browser while you type: if the page is reloaded, it is brought back. Embedded in a **Moodle question**, every question keeps its own backup: the first view of a question starts empty, *Check* (which reloads the page) brings your own calculation back and calculates it again, another question or a new attempt starts empty. The backups of the last 20 questions are kept. To keep your work for later, save it as a file (*Save*).
+
+**Undo and redo.** The two arrow buttons (between *Save* and *Calculate*) work on the whole file: typing, inserted snippets and pictures, and also adding, deleting and renaming sheets (including the rewritten `Sheet::var` references). They are greyed out when there is nothing to undo or redo. Typing is grouped into sensible steps: a short pause, Enter, pasting, cutting or switching between typing and deleting starts a new step. Switching sheets is not a step; undo shows the sheet in which the change happened. On the keyboard use `Ctrl+Z` for undo and `Ctrl+Y` or `Ctrl+Shift+Z` for redo (`Cmd` on a Mac). Up to 200 steps are kept. The history is not saved in the file; it starts empty after *Open*. It survives *Calculate* and a page reload within the same browser tab, but not closing the tab. A picture stays loaded when its line is undone, so redo brings it back.
 
 **Toolbar above the output**
 
@@ -70,6 +77,8 @@ c = sqrt(a^2 + b^2)
 ```
 
 Operators: `+  -  *  /  ^` (power), parentheses `( )`. `**` is not needed; use `^`.
+
+**Typing `^`.** On many keyboards (German layout, Mac) `^` is a *dead key*: it waits for the next key. Press it, then a space or the digit; or use the button **xʸ** at the start of the *Functions* menu: type the base, press the button and type the exponent (`r` becomes `r^(2)`). Look-alike characters such as `ˆ` that some keyboards produce are read as `^`. Watch out for a dead key followed by a vowel: `x^a` can turn into `xâ`, which is a new variable name, not a power.
 
 Several commands on one line are separated by `;`:
 
@@ -120,6 +129,16 @@ I = I_y(30'cm, 50'cm) | cm^4
 - A parameter hides a variable of the same name inside the function and does not change it.
 - Functions can call other functions, but not themselves. The names of built-in functions (`sin`, `max`, `if`, …) cannot be redefined.
 - Functions work in `plot`, `nsolve`, `diff`, `integrate` and `solve`: `plot(f(x), x, 0, 5)`.
+- A function may differentiate or integrate with respect to its own parameter and then be called with a value. The derivative is formed first, then the value is put in:
+
+```text
+u(r) = u_max*(1 - r^2/R^2)
+R = 10'mm ; u_max = 0.2'm/s ; η = 1.0e-3'Pa*s
+τ(r) = -η*diff(u(r), r)
+τ_w = τ(R) | Pa
+```
+
+  Result: τ_w = 0.04 Pa, the wall shear stress of the laminar pipe flow.
 - Functions belong to their sheet (see [Worksheets](#12-worksheets-several-sheets-in-one-file)).
 
 **Comparisons and checks.** The operators `<  >  <=  >=  ==  !=` (or `≤ ≥ ≠` from the Greek menu) compare two numbers or quantities and give `true` or `false`:
@@ -136,7 +155,7 @@ The last line is shown as a check: the formula, the two values, and the result (
 - Equality is written `==` (a single `=` assigns). Values that differ only by rounding noise count as equal, so `0.1 + 0.2 == 0.3` is true.
 - A result can be stored: `ok = σ <= σ_zul`.
 - Chains like `a < b < c` are not possible; write two comparisons.
-- `| %` shows a plain number as a percentage.
+- `| %` shows a plain number as a percentage. A percentage can also be typed as a value: `40'%` is 0.4, so `M_p <= 40'%` checks against 0.4 (see [Units](#3-units)).
 
 **Choosing a value: `if`.** `if(condition, a, b)` gives `a` if the condition is true, otherwise `b`:
 
@@ -190,11 +209,14 @@ Available units include (among many others):
 
 Micro can be typed as `u`, `µ` or `μ` (`5'uF`, `5'µF`). Ohm is typed `Ohm` and displayed as Ω. A tonne is `to` (displayed as t).
 
+**Percent** is a plain number: `a = 40'%` is shown as 40 % and calculates as 0.4 (`a*2` is 0.8). `%` stands alone; `%/K` or `40'%*a` give an error, write `a*40'%` instead.
+
 ### 3.2 How results are displayed
 
 - A plain number with a unit that you assign keeps the unit you entered, whatever it is: `T = 110'degC`, `q = 5'kN/m`, `c = 2'N/mm`, `ρ = 998'kg/m^3`.
 - Results of calculations are shown in a fitting SI unit automatically: `N`, `J`, `W`, `Pa`, `C` for `A*s`, and the usual compound units such as `N/m`, `kg/m³`, `m/s`, `kg/s`, `m³/s`, `Pa s`, `W/(m² K)`, `W/(m K)`, `K/W`, `J/(kg K)`. The numbers are in base size (a stress in Pa, a line load in N/m); append `| MPa` or `| kN/m` to choose another unit.
 - A unit without a usual name is written with the SI base units, e.g. kg/(m⁴ s²). If such a unit appears where you expected a stress or a force, a quantity was probably entered with the wrong unit.
+- 1/s is shown as Hz. For an angular frequency or a decay constant append `| 1/s` (see below).
 
 ### 3.3 Converting with `|`
 
@@ -210,7 +232,15 @@ The target after `|` can be any product, quotient or power of known units. It do
 
 ```text
 c = 4.18'kJ/(kg*K) | J/(kg*K)
-s = 0.5'J | J/K
+α = 1200'W/(m^2*K) | kW/(m^2*K)
+```
+
+A reciprocal unit is written with a 1 in the numerator: `| 1/s`, `| 1/min`, `| 1/K`, `| 1/(m*K)`:
+
+```text
+t = 5'min
+k = 1/t | 1/s
+β = 1.2e-5/(1'K) | 1/K
 ```
 
 The conversion is checked: converting a length to seconds is an error. The message names both sides, e.g. *the result has dimension [length], the unit [time]*.
@@ -248,6 +278,34 @@ df := diff(f, x)
 
 Available calculus functions include `diff`, `integrate` (indefinite and definite), `lim`, and `Eq`, `solve` (see below).
 
+**Rewriting a result: `simplify`, `expand`, `factor`.** They act only where you write them; every other line, and the formula on the left of every line, stays exactly as typed:
+
+```text
+h(t) = K*(1 - exp(-δ*t)*(cos(ω_d*t) + δ/ω_d*sin(ω_d*t)))
+g = diff(h(t), t)
+g_s = simplify(g)
+a = expand((x + y)^2)
+b = factor(x^2 - 1)
+```
+
+`g` is a long expression; `g_s` is K·(δ² + ω_d²)/ω_d · e^(−δt) · sin(ω_d t). `simplify` keeps units and can take a while for large expressions (the timeout applies).
+
+**Assumptions: `assume(T > 0)`.** Without further information a variable could be any number, even a complex one. Then an integral gives a case distinction and `sqrt(T^2)` stays as it is. `assume` on a line of its own says that variables are positive:
+
+```text
+assume(T > 0)
+h_1(t) = K*(1 - exp(-t/T))
+integrate(K - h_1(t), (t, 0, ∞))
+```
+
+Result: K·T (without `assume`: "K·T for |arg(T)| < π/2, otherwise …").
+
+- Only `name > 0` is possible, several at once: `assume(T > 0, ω_d > 0)`.
+- It applies from its line on, in its own sheet. Formulas stored in earlier lines are adjusted too, so `f = T^2`, then `assume(T > 0)`, then `f - T^2` is 0.
+- With it `sqrt(T^2)` is `T`, `solve(Eq(T^2, 4), T)` gives only 2, and `simplify` can do more.
+- A variable that already has a value cannot get an assumption. A value given later counts as usual.
+- Values taken from another sheet (`Sheet::x`) keep the assumptions of that sheet.
+
 Other functions: `sqrt`, `exp`, `ln`, `log`, `sin`, `cos`, `tan`, `asin`, `acos`, `atan`, `atan2`, `sinh`, `cosh`, `tanh`, `abs`, and for complex numbers `re`, `im`, `conjugate`, `arg`. `abs(x)` is displayed as |x|.
 
 Special functions: the error function `erf(x)` and `erfc(x)` (for example transient heat conduction, `Θ = erfc(x/(2*sqrt(a*t)))`), and the Bessel functions `besselj(n, x)`, `bessely(n, x)`, `besseli(n, x)`, `besselk(n, x)`, displayed as Jₙ(x), Yₙ(x), Iₙ(x), Kₙ(x). Their arguments must be plain numbers; they can be plotted and used in `nsolve` and `nintegrate`.
@@ -273,6 +331,7 @@ x_1 = sol[1] ; x_2 = sol[2]
 
 - `Eq(left, right)` builds an equation.
 - `solve(eq, x)` solves symbolically, `csolve` allows complex solutions, `nsolve(expr, (x), (start))` solves numerically from a start value.
+- `solve` drops solutions that are certainly complex (`x^2 = -4`). Solutions with variables without a value are kept: `solve(Eq(F, m*a), a)` gives F/m, `solve(Eq(x^2, a), x)` gives ±√a. With `assume(a > 0)` (see [Symbolic math](#4-symbolic-math)) SymPy can decide more.
 - `sol[1]`, `sol[2]`, … picks one solution out of a list. **Counting starts at 1**, as in mathematics. If there is only one solution, `sol[1]` is that solution. For vectors and matrices see [Vectors and matrices](#7-vectors-and-matrices).
 
 ```text
@@ -360,11 +419,13 @@ Operators `+ - *` and `^` work on matrices (`A^2`, `A*v`).
 
 ```text
 v = vec(5, 6, 7)
-v[1]                 ; 5, the first element
+v[1]
 A = mat([[1, 2], [3, 4]])
-A[2][1]              ; 3: row 2, column 1 (also written A[2, 1])
-A[2]                 ; the second row
+A[2][1]
+A[2]
 ```
+
+`v[1]` is 5, the first element. `A[2][1]` is 3: row 2, column 1 (also written `A[2, 1]`). `A[2]` is the second row.
 
 An index outside the vector or matrix, the index 0 or a fraction is an error.
 
@@ -384,8 +445,10 @@ Results are rounded like single values. If all elements have the same unit it is
 ```text
 T = vec(20, 40, 60)'degC
 ρ = vec(998, 992, 983)'kg/m^3
-ρ_30 = interp(T, ρ, 30'degC)        ; 995 kg/m^3
+ρ_30 = interp(T, ρ, 30'degC)
 ```
+
+Result: ρ_30 = 995 kg/m³.
 
 - The x values must rise or fall steadily. The value must have the same kind of unit as the x values.
 - A value **outside the table is an error**; nothing is extrapolated.
@@ -396,8 +459,10 @@ For a map with two inputs use `interp2(x, y, Z, value_x, value_y)`. `Z` is a mat
 ```text
 d = vec(10, 20)'mm ; n = vec(1000, 2000)'rpm
 P = mat([[1, 2], [3, 5]])'kW
-interp2(d, n, P, 15'mm, 1500'rpm) | kW      ; 2.75 kW
+interp2(d, n, P, 15'mm, 1500'rpm) | kW
 ```
+
+Result: 2.75 kW.
 
 A larger matrix is easier to type with one row per line, and `=:` shows only the result (see [Basics](#2-basics-assignments-and-calculations)):
 
@@ -417,7 +482,7 @@ f = sin(x)
 plot(f, x, 0, 2*pi)
 ```
 
-`plot(function, variable, min, max)`. The plot is generated as an image in the output. Functions with units are plotted in SI base units; the axis label says so. Plots are included when you export to LaTeX (as a `.zip`).
+`plot(function, variable, min, max)`. The plot is generated as an image in the output. Functions with units are plotted in SI base units; the axis label says so. A function that does not depend on the variable (`plot(1, x, 0, 1)`, a constant force) is drawn as a horizontal line. Plots are included when you export to LaTeX (as a `.zip`).
 
 Your own variables and functions can be used directly; the plot variable itself stays a variable even if a variable of that name has a value:
 
@@ -455,8 +520,10 @@ The line shows all options, so you can change the picture by editing it:
 
 ```text
 picture("beam", width=300, align=left)
-picture("beam")                          # own size, at most 500 px, centred
+picture("beam")
 ```
+
+The second line shows the picture in its own size (at most 500 px), centred.
 
 The same picture can be used several times, for example with different widths. A picture is never wider than the page; in the LaTeX export 96 px correspond to 1 inch, as in the print layout.
 
@@ -475,7 +542,7 @@ The same picture can be used several times, for example with different widths. A
 
 - Files with pictures need this version or a newer one. An older version shows the Base64 lines as faulty input.
 - If you copy a `picture(...)` line into another file without its picture, the output shows *Image 'beam' is not loaded*.
-- The browser keeps pictures in its automatic backup (autosave) as long as the browser storage has room; if it is full you are told once, and you should save the file.
+- The browser keeps pictures in its automatic backup as long as the browser storage has room; if it is full you are told once, and you should save the file.
 
 ---
 
@@ -483,7 +550,7 @@ The same picture can be used several times, for example with different widths. A
 
 | Input | Result |
 |---|---|
-| `# note` | Comment, ignored completely (not shown) |
+| `# note` | Comment, ignored completely (not shown); only at the start of a line |
 | `"Heading"` | Shown as **bold** text |
 | `'Remark'` | Shown as plain text |
 
@@ -515,10 +582,12 @@ Special characters such as `^ _ ~ \ % # & $ < >` inside text are displayed corre
 **Accents:** append `__dot`, `__bar`, `__hat`, `__tilde` (double underscore) to put an accent over the symbol:
 
 ```text
-Q__dot = 5'W        ; renders as Q̇
-P = Q__dot * 2       ; Q̇ is a normal variable
+Q__dot = 5'W
+P = Q__dot * 2
 Q__bar = 3 ; a__hat = 4 ; v__tilde = 5'm/s
 ```
+
+`Q__dot` is displayed as Q̇ and is a normal variable.
 
 Accents combine with subscripts (`F__dot_max`) and Greek letters (`ω__dot`). A single underscore is always a subscript.
 
@@ -532,7 +601,7 @@ A file can contain several sheets, like the tabs of a spreadsheet. Sheets share 
 
 Below the editor you find the tabs of the sheets.
 
-- **New sheet:** the *New sheet* button. New sheets are called `S1`, `S2`, … .
+- **New sheet:** the *New sheet* button below the editor. New sheets are called `S1`, `S2`, … . (The *New calculation* button in the toolbar instead starts a new file with one empty sheet.)
 - **Switch:** click a tab. The editor shows only that sheet.
 - **Rename:** double-click a tab. Names consist of letters, digits and underscore and must start with a letter or underscore (`Loads`, `Beam_1`).
 - **Delete:** click the × on the selected tab (you are asked to confirm).
@@ -586,7 +655,7 @@ You can edit this text file in any editor; `Save` stores all sheets, `Open` rest
 
 Which setting is the default is configurable by the administrator (environment variable `ENGIPAD_LIVE_DEFAULT=1` or `0`). In the local version, live update is on by default.
 
-Your input (including pictures, as far as the browser storage allows) is also kept in the browser (autosave): if the page is reloaded accidentally, the editor content is restored.
+Your input (including pictures, as far as the browser storage allows) is also kept in the browser (automatic backup): if the page is reloaded, the editor content is restored. In a Moodle question each question has its own backup (see [The interface](#1-the-interface)).
 
 ---
 
@@ -611,6 +680,7 @@ Invalid values fall back to the default (the field keeps your input). Values are
 
 ## 15. Saving, loading, printing, exporting
 
+- **New calculation:** the first button of the toolbar; one empty sheet instead of the whole file (asks first, *Undo* brings it back).
 - **Save / Open:** a plain text file with your input. With several sheets it contains the `##Name` markers. Pictures are stored in the same file (see [Pictures](#9-pictures)).
 - **Print:** prints only the formatted output (the editor is hidden). To get a PDF, choose "Save as PDF" in the print dialog. With more than one sheet, every page carries a **header with the sheet name**. With *Print/export all sheets* enabled, all sheets are printed, each starting on a new page.
 - **LaTeX export:** downloads a standalone `.tex` file that compiles with `pdflatex`. If the sheet contains plots or pictures, you get a `.zip` with the `.tex` and the image files (`plot_1.png`, `img_beam.png`, …); unpack it before running `pdflatex`. With several sheets the sheet name is in the page header; with *Print/export all sheets* every sheet starts on a new page.
@@ -626,7 +696,8 @@ Invalid values fall back to the default (the field keeps your input). Values are
 - For safety, only a fixed set of functions is available. An unknown function name is not executed; it stays a symbolic placeholder. `plot()` and `nsolve()` refuse it with *Unknown function '…'*.
 - A line like `M(x) = F*(L - x)` is a function definition. Older versions stored it as a variable literally named `M(x)` and showed a value next to the formula; such files still calculate and plot, but the line now shows the formula only.
 - **Changed in this version: counting starts at 1.** Older versions counted from 0 (`sol[0]` was the first solution). A file written for an older version that uses `sol[0]` now reports *Indices start at 1*; a file that uses `sol[1]` now gets the **first** solution instead of the second. Check such files once.
-- Known cosmetic limits: `deg/s` is displayed as Hz; a moment is displayed in J unless you append `| Nm`.
+- Known cosmetic limits: 1/s and `deg/s` are displayed as Hz (append `| 1/s`); a moment is displayed in J unless you append `| Nm`; in a list of solutions names with an index are set plainly (F_max instead of F with an upright index).
+- `solve` used to drop every solution that contained a variable without a value (`solve(Eq(F, m*a), a)` gave an empty list). Files that relied on that now show the symbolic solutions.
 
 ---
 
@@ -645,6 +716,11 @@ Invalid values fall back to the default (the field keeps your input). Values are
 | Show only the result | `C =: mat([[1,2],[3,4]])` |
 | Continue a statement on the next line | leave a bracket open (or end the line with `\`) |
 | Derivative / integral | `diff(f, x)`, `integrate(f, (x, 0, 1))` |
+| Simplify / expand / factor | `simplify(g)`, `expand((a+b)^2)`, `factor(x^2-1)` |
+| Variable is positive | `assume(T > 0)` |
+| Power without the `^` key | button *xʸ* (first in *Functions*) |
+| Percent as a value | `M_p <= 40'%` |
+| Reciprocal unit | `k = 1/t \| 1/s` |
 | Solve and pick a solution | `s = solve(Eq(x^2-4, 0), x)` then `s[1]` |
 | Solve numerically with a unit | `U = nsolve(Eq(...), U, 0.5'V)` |
 | Sum | `sum(i, (i, 1, n))` |
@@ -661,4 +737,6 @@ Invalid values fall back to the default (the field keeps your input). Values are
 | Greek / accent | `α`, `Q__dot` |
 | Value from another sheet | `Sheet::var` |
 | New sheet in a text file | `##Name` |
+| Start again with an empty sheet | button *New calculation* (first in the toolbar) |
+| Find a button that is not visible | menu ☰ at the right end of the toolbar |
 | Calculate from keyboard | Ctrl+Enter |

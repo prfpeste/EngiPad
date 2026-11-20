@@ -84,12 +84,14 @@ In the toolbar, the *Functions* menu has buttons that insert `prop(…)` and `ha
 Use the vapour quality `x` as the second input: `x = 0` is the boiling liquid, `x = 1` the saturated vapour.
 
 ```text
-T_s = prop(T, p, 1'bar, x, 0, Water) | degC        ; 99.606 °C
-p_s = prop(p, T, 100'degC, x, 0, Water) | bar      ; 1.0142 bar
-h_1 = prop(h, p, 1'bar, x, 0, Water) | kJ/kg       ; 417.5 kJ/kg
-h_2 = prop(h, p, 1'bar, x, 1, Water) | kJ/kg       ; 2674.9 kJ/kg
-r = h_2 - h_1 | kJ/kg                              ; enthalpy of vaporisation
+T_s = prop(T, p, 1'bar, x, 0, Water) | degC
+p_s = prop(p, T, 100'degC, x, 0, Water) | bar
+h_1 = prop(h, p, 1'bar, x, 0, Water) | kJ/kg
+h_2 = prop(h, p, 1'bar, x, 1, Water) | kJ/kg
+r = h_2 - h_1 | kJ/kg
 ```
+
+Results: 99.606 °C, 1.0142 bar, 417.5 kJ/kg, 2674.9 kJ/kg; `r` = 2257.4 kJ/kg is the enthalpy of vaporisation.
 
 Wet steam: `prop(h, p, 1'bar, x, 0.9, Water)`.
 
@@ -117,11 +119,13 @@ EngiPad uses CoolProp 6.8.0, which knows 124 pure and pseudo-pure fluids. The co
 `haprop` needs **three** known quantities, normally temperature, pressure and one quantity for the moisture.
 
 ```text
-h = haprop(h, T, 25'degC, p, 1.01325'bar, φ, 0.6) | kJ/kg        ; 55.574 kJ/kg
-x = haprop(x, T, 25'degC, p, 1.01325'bar, φ, 0.6)                ; 0.011949
-T_tau = haprop(T_tau, T, 25'degC, p, 1.01325'bar, φ, 0.6) | degC ; 16.704 °C
-φ_2 = haprop(φ, T, 30'degC, p, 1.01325'bar, x, x)                ; state with the same water content
+h = haprop(h, T, 25'degC, p, 1.01325'bar, φ, 0.6) | kJ/kg
+x = haprop(x, T, 25'degC, p, 1.01325'bar, φ, 0.6)
+T_tau = haprop(T_tau, T, 25'degC, p, 1.01325'bar, φ, 0.6) | degC
+φ_2 = haprop(φ, T, 30'degC, p, 1.01325'bar, x, x)
 ```
+
+Results: 55.574 kJ/kg, 0.011949, 16.704 °C. The last line gives the relative humidity at 30 °C with the same water content: 0.44778.
 
 | Quantity | Name | Unit of the result | As input |
 |---|---|---|---|
@@ -170,9 +174,11 @@ In a plot the variable is a plain number in the SI base unit (here K), like ever
 Solving for a state and integrating work the same way; the unit of the start value and of the limits says what the variable is:
 
 ```text
-T_b = nsolve(prop(p, T, t, x, 0, Water) - 2'bar, t, 380'K) | degC          ; 120.21 °C
-q = nintegrate(prop(c_p, T, t, p, 1'bar, Water), (t, 20'degC, 80'degC)) | kJ/kg   ; 251.05 kJ/kg
+T_b = nsolve(prop(p, T, t, x, 0, Water) - 2'bar, t, 380'K) | degC
+q = nintegrate(prop(c_p, T, t, p, 1'bar, Water), (t, 20'degC, 80'degC)) | kJ/kg
 ```
+
+Results: 120.21 °C and 251.05 kJ/kg.
 
 Often there is a direct way that is quicker and clearer: the boiling temperature is `prop(T, p, 2'bar, x, 0, Water)`, and the heat for warming up is the enthalpy difference `prop(h, T, 80'degC, …) - prop(h, T, 20'degC, …)`.
 

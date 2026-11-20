@@ -5,7 +5,7 @@
 Free, open-source calculation notebook for engineers: physical units, symbolic math, matrices and plots with instant LaTeX output. Several worksheets in one file, print or export to pdflatex-ready `.tex`. Runs locally on Windows and Linux, no cloud, no account, no internet connection needed.
 
 - Calculate with physical units (`10'kg`, `5'W/(m*K)`, `2'bar | Pa`) and get dimension checks for free
-- Symbolic math: derivatives, integrals, equations, sums, products, limits
+- Symbolic math: derivatives, integrals, equations, sums, products, limits; `simplify`, `expand`, `factor`; `assume(T > 0)` for positive variables
 - Your own functions (`f(x) = x^2 + 1`), comparisons and checks (`σ <= σ_zul | MPa` gives *180 MPa ≤ 235 MPa ⇒ true*), `if`, `min`, `max`, rounding
 - Vectors, matrices and plots; a matrix can be typed over several lines
 - Results typeset with MathJax while you type (optional live update); MathJax and the fonts are part of the program, nothing is loaded from the internet
@@ -58,9 +58,9 @@ The complete guide (input syntax, units, worksheets, settings, printing and expo
 
 - Web UI using Flask, HTML/CSS/JavaScript and MathJax
 - Expressions are parsed by a small, purpose-built parser and evaluated through a fixed function whitelist — no `eval()`/`sympify()` is ever run on user input (see [Security](#security))
-- SymPy integration for symbolic expressions (`diff`, `integrate`, `Eq`, `solve`, `csolve`, `nsolve`, `sum`, `prod`, `lim`), numeric evaluation, symbolic display mode (`:=`) and result-only mode (`=:`)
-- Unit system: apostrophe syntax (`10'J`, `5'm`), dimension checks, automatic unit simplification, and explicit target units with `| unit` — any product/quotient/power of known units (`| kWh`, `| J/(kg*K)`)
-- User-defined functions `f(x) = …`, `g(a, b) = …`, usable in `plot`, `nsolve`, `diff`, `integrate`
+- SymPy integration for symbolic expressions (`diff`, `integrate`, `Eq`, `solve`, `csolve`, `nsolve`, `sum`, `prod`, `lim`, `simplify`, `expand`, `factor`), assumptions with `assume(T > 0)`, numeric evaluation, symbolic display mode (`:=`) and result-only mode (`=:`)
+- Unit system: apostrophe syntax (`10'J`, `5'm`), dimension checks, automatic unit simplification, and explicit target units with `| unit` — any product/quotient/power of known units (`| kWh`, `| J/(kg*K)`, `| 1/s`); percent as a value (`40'%`)
+- User-defined functions `f(x) = …`, `g(a, b) = …`, usable in `plot`, `nsolve`, `diff`, `integrate`; a function may differentiate with respect to its own parameter (`τ(r) = -η*diff(u(r), r)`, then `τ(R)`)
 - **Fluid properties** from [CoolProp](http://www.coolprop.org): `prop(ρ, T, 20'degC, p, 1'bar, Water)` and `haprop(...)` for humid air, with units; usable in functions, plots, `nsolve` and `nintegrate` (see [COOLPROP_GUIDE.md](COOLPROP_GUIDE.md))
 - Special functions `erf`, `erfc`, `besselj`, `bessely`, `besseli`, `besselk` (also in plots, without SciPy)
 - Comparisons `< > <= >= == !=` with unit checking, `if(condition, a, b)`, `min`, `max`, `round`, `floor`, `ceil`, `sign`, percent display with `| %`
