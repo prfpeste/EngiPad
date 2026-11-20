@@ -156,6 +156,45 @@ body {
   display: block;
 }
 
+/* --- Toolbar overflow menu (static/editor.js, initToolbarOverflow) ---
+   When the input toolbar gets too narrow (e.g. a narrow Moodle column),
+   the data-collapsible buttons move, from the right, into the panel of
+   the last button ("More", menu icon), one below the other. */
+.col-header .toolbar {
+  min-width: 0;        /* may be narrower than its buttons: JS measures */
+}
+
+.toolbar-more[hidden] {
+  display: none;
+}
+
+.toolbar-more > .toolbar-more-panel {
+  left: auto;
+  right: 0;
+  width: auto;
+  padding: 6px;
+}
+
+.toolbar-more[data-open] > .toolbar-more-panel {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+}
+
+.toolbar-more-panel .tool-divider {
+  display: none;
+}
+
+@media (min-width: 761px) {
+  /* A menu of a button inside the overflow menu opens to its left. */
+  .toolbar-more-panel .dropdown-panel {
+    top: 0;
+    left: auto;
+    right: calc(100% + 8px);
+  }
+}
+
 .panel-title {
   margin: 0 0 8px;
   font-size: 12px;
@@ -618,4 +657,19 @@ textarea:focus {
     break-before: page;
     page-break-before: always;
   }
+}
+
+/* Web version only (templates/web.html, static/web/web_shell.js): status
+   line above the result while Python loads, hidden once everything is there. */
+.web-status {
+  padding: 6px 16px;
+  font-size: 12px;
+  color: var(--text-secondary);
+  background: var(--bg-header);
+  border-bottom: 1px solid var(--border);
+}
+.web-status.is-hidden { display: none; }
+.web-status.is-error { color: #8a1c13; background: #fdecea; }
+@media print {
+  .web-status { display: none !important; }
 }

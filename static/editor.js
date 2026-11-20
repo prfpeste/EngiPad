@@ -8,7 +8,7 @@ const fileInput = document.getElementById('file-input');
 function loadIcons() {
   document.querySelectorAll('[data-icon]').forEach(function (el) {
     const name = el.getAttribute('data-icon');
-    fetch('/static/icons/' + name + '.svg')
+    fetch('static/icons/' + name + '.svg') // relative: also works in the web version
       .then(function (res) { return res.ok ? res.text() : Promise.reject(res.status); })
       .then(function (svg) { el.innerHTML = svg; })
       .catch(function () { /* icon missing -- button stays empty, not a hard error */ });
@@ -18,7 +18,8 @@ function loadIcons() {
 // --- Dropdowns ---
 function closeAllDropdowns(except) {
   document.querySelectorAll('[data-dropdown]').forEach(function (dd) {
-    if (dd !== except) dd.removeAttribute('data-open');
+    // a menu inside the overflow menu keeps the overflow menu open
+    if (dd !== except && !(except && dd.contains(except))) dd.removeAttribute('data-open');
   });
 }
 
@@ -29,6 +30,8 @@ function positionDropdown(dd) {
   // On narrow windows, CSS (media query) takes over full bottom-sheet
   // positioning -- don't interfere with that here.
   if (window.matchMedia('(max-width: 760px)').matches) return;
+  // Inside the overflow menu the CSS opens it to the left.
+  if (dd.parentElement && dd.parentElement.closest('.toolbar-more-panel')) return;
 
   panel.style.left = '';
   panel.style.right = '';
@@ -83,6 +86,125 @@ function initDropdowns() {
   document.addEventListener('keydown', function (e) {
     if (e.key === 'Escape') closeAllDropdowns(null);
   });
+}
+
+// --- Toolbar overflow ("More" menu) ---
+//
+// The input toolbar can get narrower than its buttons (a narrow Moodle
+// column, a small window). Then the buttons marked data-collapsible move,
+// starting from the right, into the panel of the "More" button
+// ([data-toolbar-more], menu icon), one below the other, in their order.
+// New, Open, Save, Undo, Redo and Calculate are not collapsible and stay.
+// The moved elements are the original buttons/menus, so all their
+// handlers keep working; when there is room again they move back.
+function initToolbarOverflow() {
+  const more = document.querySelector('[data-toolbar-more]');
+  if (!more) return;
+  const toolbar = more.parentElement;
+  const header = toolbar.closest('.col-header');
+  const panel = more.querySelector('[data-panel]');
+  const items = Array.prototype.slice.call(toolbar.querySelectorAll(':scope > [data-collapsible]'));
+  if (!header || !panel || !items.length) return;
+  // a marker at each item's place in the toolbar, to put it back there
+  const homes = items.map(function (item) {
+    const mark = document.createComment('toolbar slot');
+    item.parentNode.insertBefore(mark, item);
+    return mark;
+  });
+  let collapsed = -1;
+
+  function available() {
+    const cs = window.getComputedStyle(header);
+    const gap = parseFloat(cs.columnGap) || 0;
+    let width = header.clientWidth - (parseFloat(cs.paddingLeft) || 0) - (parseFloat(cs.paddingRight) || 0);
+    Array.prototype.forEach.call(header.children, function (child) {
+      if (child !== toolbar) width -= child.getBoundingClientRect().width + gap;
+    });
+    return width;
+  }
+
+  function isShown(el) {
+    return el.nodeType === 1 && !el.hidden && window.getComputedStyle(el).display !== 'none';
+  }
+
+  // No divider at the end of the visible buttons or next to another one.
+  function tidyDividers() {
+    const children = Array.prototype.slice.call(toolbar.children);
+    children.forEach(function (el) {
+      if (el.classList.contains('tool-divider')) el.style.display = '';
+    });
+    children.forEach(function (el, i) {
+      if (!el.classList.contains('tool-divider')) return;
+      let next = null;
+      for (let j = i + 1; j < children.length; j++) {
+        if (isShown(children[j]) && children[j] !== more) { next = children[j]; break; }
+      }
+      if (!next || next.classList.contains('tool-divider')) el.style.display = 'none';
+    });
+  }
+
+  function layout() {
+    items.forEach(function (item, i) { homes[i].parentNode.insertBefore(item, homes[i].nextSibling); });
+    more.hidden = true;
+    tidyDividers();
+    let count = 0;
+    const room = available();
+    if (toolbar.scrollWidth > room + 0.5) {
+      more.hidden = false;
+      for (let i = items.length - 1; i >= 0 && toolbar.scrollWidth > room + 0.5; i--) {
+        panel.insertBefore(items[i], panel.firstChild);
+        count++;
+        tidyDividers();
+      }
+    }
+    if (count !== collapsed) {
+      if (collapsed >= 0) closeAllDropdowns(null); // a menu that moved would be misplaced
+      collapsed = count;
+    }
+  }
+
+  // A button in the menu that does not open a menu itself closes it.
+  panel.addEventListener('click', function (e) {
+    const btn = e.target.closest('.tool-btn');
+    if (btn && !btn.hasAttribute('data-trigger')) closeAllDropdowns(null);
+  });
+
+  let pending = false;
+  function schedule() {
+    if (pending) return;
+    pending = true;
+    requestAnimationFrame(function () { pending = false; layout(); });
+  }
+  if (window.ResizeObserver) new ResizeObserver(schedule).observe(header);
+  window.addEventListener('resize', schedule);
+  layout();
+}
+
+// --- New calculation ---
+//
+// Replaces the whole file (all sheets) by one empty sheet. It is an undo
+// step (Undo brings the calculation back); pictures stay loaded until the
+// next save, like when their lines are deleted.
+function newCalculation() {
+  flushHistory();
+  syncActiveSheet();
+  const hasContent = sheets.length > 1 || sheets.some(function (sh) { return sh.code.trim() !== ''; });
+  if (hasContent && !window.confirm('Start a new calculation? The current one is discarded ' +
+                                    '(Undo brings it back).')) return;
+  sheets = [{ name: null, code: '' }];
+  showSheet(0);
+  commitHistory();
+  const out = document.querySelector('.output-container');
+  if (out) out.innerHTML = '';
+  const print = document.getElementById('print-sheets');
+  if (print) print.innerHTML = '';
+  scheduleAutosave();
+  codeTextarea.focus();
+}
+
+function initNewCalculation() {
+  const btn = document.getElementById('new-calc-btn');
+  if (btn) btn.addEventListener('click', newCalculation);
 }
 
 // --- Open file ---
@@ -175,28 +297,72 @@ function insertSnippet(snippet, cursorOffsetFromEnd) {
 const AUTOSAVE_KEY = 'engipad_autosave_code';
 const AUTOSAVE_DEBOUNCE_MS = 1000;
 
-// Erkennt, ob das Textfeld noch den unveraenderten Beispieltext zeigt
-// (= frischer Seitenaufruf ohne eigene Eingabe). Nur DANN wird ein
-// gespeicherter Stand automatisch wiederhergestellt -- ein Ergebnis,
-// das der Server gerade erst frisch berechnet und zurueckgeschickt hat
-// (z.B. nach Klick auf "Calculate"), darf NIE ueberschrieben werden.
-function isDefaultExampleText(text) {
-  return text.trim().indexOf('"Example:"') === 0;
+// --- One backup per task ---
+//
+// Embedded in a Moodle question, every question keeps its own backup: the
+// first view of a question starts with an empty sheet, "Check" (which
+// reloads the page) or a reload of the same question brings the student's
+// own calculation back, another question or a new attempt starts empty
+// again. The task is
+//   1. the URL parameter ?task=name (set in the iframe address; works from
+//      any web server), or
+//   2. the Moodle question EngiPad is embedded in: Moodle wraps each question
+//      of an attempt in <div id="question-<attempt usage>-<slot>">; EngiPad
+//      is served by the same Moodle (pluginfile.php), so the page may read
+//      the id of the element around its iframe (nothing is changed there),
+//   3. otherwise none: one backup as always (server, desktop, direct call).
+// Only the last TASK_LIMIT tasks are kept (browser storage is limited).
+const TASK_INDEX_KEY = 'engipad_autosave_tasks';
+const TASK_LIMIT = 20;
+
+function detectTask() {
+  const param = new URLSearchParams(window.location.search).get('task');
+  if (param) return 'task:' + param.slice(0, 100);
+  try {
+    if (window.self !== window.top && window.frameElement) {
+      const question = window.frameElement.closest('[id^="question-"]');
+      if (question) return 'moodle:' + question.id.slice(0, 100);
+    }
+  } catch (e) {
+    // embedded by a page of another server: no access, no task
+  }
+  return null;
 }
 
+const AUTOSAVE_TASK = detectTask();
+const AUTOSAVE_TASK_KEY = AUTOSAVE_TASK ? AUTOSAVE_KEY + '::' + AUTOSAVE_TASK : AUTOSAVE_KEY;
+
+// Notes the task as just used and removes the backups of the oldest tasks.
+function touchTask() {
+  if (!AUTOSAVE_TASK) return;
+  let index = {};
+  try { index = JSON.parse(window.localStorage.getItem(TASK_INDEX_KEY) || '{}') || {}; } catch (e) { index = {}; }
+  index[AUTOSAVE_TASK_KEY] = Date.now();
+  const keys = Object.keys(index).sort(function (a, b) { return index[b] - index[a]; });
+  keys.slice(TASK_LIMIT).forEach(function (key) {
+    try { window.localStorage.removeItem(key); } catch (e) { /* ignore */ }
+    delete index[key];
+  });
+  try { window.localStorage.setItem(TASK_INDEX_KEY, JSON.stringify(index)); } catch (e) { /* full */ }
+}
+
+// A new page (empty editor) gets the backup of its task back (see above;
+// none yet: it stays empty). A page the server has just computed
+// (Calculate in the server version reloads the page) already holds the
+// code and must not be overwritten, but its pictures are not in the page:
+// they are taken from the backup.
 function restoreAutosave() {
   let saved;
   try {
-    saved = window.localStorage.getItem(AUTOSAVE_KEY);
+    saved = window.localStorage.getItem(AUTOSAVE_TASK_KEY);
   } catch (e) {
-    return; // localStorage nicht verfuegbar (z.B. Privacy-Mode) -- kein Problem, einfach nichts wiederherstellen
+    return; // localStorage nicht verfuegbar (z.B. Privacy-Mode) -- kein Problem
   }
   if (!saved) return;
-  if (isDefaultExampleText(codeTextarea.value)) {
+  if (codeTextarea.value.trim() === '') {
     codeTextarea.value = saved; // loadWorkbookText() takes its images from it
+    touchTask();
   } else {
-    // A fresh calculation of the server must not be overwritten (see
-    // above), but its images are not in the page: take them from here.
     mergeImagesFromText(saved);
   }
 }
@@ -206,7 +372,8 @@ let scheduleAutosave = function () {}; // replaced by initAutosave()
 
 function saveAutosave(notify) {
   try {
-    window.localStorage.setItem(AUTOSAVE_KEY, getFileText());
+    window.localStorage.setItem(AUTOSAVE_TASK_KEY, getFileText());
+    touchTask();
   } catch (e) {
     // localStorage nicht verfuegbar oder voll -- Autosave faellt in dem Fall
     // einfach aus, der Rest der App funktioniert unveraendert weiter.
@@ -284,54 +451,57 @@ function runLiveUpdate() {
   liveController = new AbortController();
   const controller = liveController;
 
-  fetch('/', {
-    method: 'POST',
-    body: new URLSearchParams(new FormData(form)),
-    signal: controller.signal,
-  })
-    .then(function (res) {
-      if (!res.ok) throw new Error('HTTP ' + res.status);
-      return res.text();
-    })
-    .then(function (html) {
-      const doc = new DOMParser().parseFromString(html, 'text/html');
-      const fresh = doc.querySelector('.output-container');
-      if (!fresh) throw new Error('no result area in response');
-
-      const wrap = current.closest('.output-wrap');
-      const scrollTop = wrap ? wrap.scrollTop : 0;
-
-      if (window.MathJax && MathJax.typesetClear) MathJax.typesetClear([current]);
-      current.innerHTML = fresh.innerHTML;
-      current.setAttribute('style', fresh.getAttribute('style') || '');
-      fillPictures(current);
-
-      const freshForm = doc.getElementById('calc-form');
-      if (freshForm) form.setAttribute('style', freshForm.getAttribute('style') || '');
-
-      // Results of ALL sheets for printing (only filled when "Print/export
-      // all sheets" is on). Typeset on demand, see ensurePrintTypeset().
-      const printBox = document.getElementById('print-sheets');
-      const freshPrint = doc.getElementById('print-sheets');
-      if (printBox && freshPrint) {
-        if (window.MathJax && MathJax.typesetClear) MathJax.typesetClear([printBox]);
-        printBox.innerHTML = freshPrint.innerHTML;
-        printBox.setAttribute('style', freshPrint.getAttribute('style') || '');
-        printBox.classList.add('tex2jax_ignore');
-        printBox.dataset.typeset = '0';
-        fillPictures(printBox);
-      }
-
-      if (wrap) wrap.scrollTop = scrollTop;
-      if (window.MathJax && MathJax.typesetPromise) {
-        MathJax.typesetPromise([current]).catch(function () { /* keep going */ });
-      }
-    })
+  // The shell (static/server_shell.js or static/web/web_shell.js)
+  // computes the page: the server via fetch, the web version in Python
+  // in the browser. Both return the HTML of the whole page.
+  window.EngiPadShell.calculate(form, controller.signal)
+    .then(applyResultPage)
     .catch(function (err) {
       if (err && err.name === 'AbortError') return; // superseded by a newer request
       // keep the last good result (visible in the browser console for debugging)
       console.error('EngiPad live update failed:', err);
     });
+}
+
+// Puts the result area (and the print area) of a freshly computed page
+// into the current page, without reloading it.
+function applyResultPage(html) {
+  const form = document.getElementById('calc-form');
+  const current = document.querySelector('.output-container');
+  if (!form || !current) return;
+
+  const doc = new DOMParser().parseFromString(html, 'text/html');
+  const fresh = doc.querySelector('.output-container');
+  if (!fresh) throw new Error('no result area in response');
+
+  const wrap = current.closest('.output-wrap');
+  const scrollTop = wrap ? wrap.scrollTop : 0;
+
+  if (window.MathJax && MathJax.typesetClear) MathJax.typesetClear([current]);
+  current.innerHTML = fresh.innerHTML;
+  current.setAttribute('style', fresh.getAttribute('style') || '');
+  fillPictures(current);
+
+  const freshForm = doc.getElementById('calc-form');
+  if (freshForm) form.setAttribute('style', freshForm.getAttribute('style') || '');
+
+  // Results of ALL sheets for printing (only filled when "Print/export
+  // all sheets" is on). Typeset on demand, see ensurePrintTypeset().
+  const printBox = document.getElementById('print-sheets');
+  const freshPrint = doc.getElementById('print-sheets');
+  if (printBox && freshPrint) {
+    if (window.MathJax && MathJax.typesetClear) MathJax.typesetClear([printBox]);
+    printBox.innerHTML = freshPrint.innerHTML;
+    printBox.setAttribute('style', freshPrint.getAttribute('style') || '');
+    printBox.classList.add('tex2jax_ignore');
+    printBox.dataset.typeset = '0';
+    fillPictures(printBox);
+  }
+
+  if (wrap) wrap.scrollTop = scrollTop;
+  if (window.MathJax && MathJax.typesetPromise) {
+    MathJax.typesetPromise([current]).catch(function () { /* keep going */ });
+  }
 }
 
 function initLiveUpdate() {
@@ -924,7 +1094,6 @@ async function addImageFromFile(file) {
 function initPictures() {
   const btn = document.getElementById('image-btn');
   const input = document.getElementById('image-input');
-  const form = document.getElementById('calc-form');
 
   if (btn && input) {
     btn.addEventListener('click', function () { input.click(); });
@@ -937,24 +1106,6 @@ function initPictures() {
 
   const select = document.getElementById('image-limit-select');
   if (select) select.addEventListener('change', updateImageStatus);
-
-  // The LaTeX export needs the picture data; every other submit and every
-  // live update carries only the names (field stays empty).
-  if (form) {
-    form.addEventListener('submit', function (e) {
-      const field = document.getElementById('export-images-field');
-      if (!field) return;
-      const submitter = e.submitter;
-      if (submitter && submitter.getAttribute('formaction') === '/export/latex') {
-        const data = {};
-        usedImageEntries().forEach(function (entry) { data[entry.name] = entry.b64; });
-        field.value = Object.keys(data).length ? JSON.stringify(data) : '';
-        setTimeout(function () { field.value = ''; }, 0);
-      } else {
-        field.value = '';
-      }
-    });
-  }
 
   codeTextarea.addEventListener('input', updateImageStatus);
   updateImageStatus();
@@ -1207,40 +1358,28 @@ function initHistory() {
   });
 }
 
-// --- Quit button (only rendered when the server runs locally, see
-// app.py /shutdown): stops the server process, then replaces the page by
-// a short notice (a script can't reliably close a tab it didn't open).
-function initExitButton() {
-  const btn = document.getElementById('exit-btn');
-  if (!btn) return;
-
-  btn.addEventListener('click', function () {
-    if (!window.confirm('Quit EngiPad? The local server will be stopped.')) return;
-    saveAutosave(false);
-
-    fetch('/shutdown', {
-      method: 'POST',
-      headers: { 'X-Shutdown-Token': btn.getAttribute('data-token') || '' },
-    })
-      .then(function (res) {
-        if (!res.ok) throw new Error('HTTP ' + res.status);
-        document.body.innerHTML =
-          '<div style="font-family: sans-serif; text-align: center; margin-top: 20vh;">' +
-          '<h2>EngiPad has been stopped.</h2>' +
-          '<p>You can close this tab now.</p></div>';
-        window.close(); // only works for tabs opened by a script, harmless otherwise
-      })
-      .catch(function () {
-        window.alert('Could not stop EngiPad (the server may already be stopped).');
-      });
-  });
+// The LaTeX export needs the picture data (JSON {name: Base64}); every
+// calculation carries only the names. Used by the shells for the export.
+function exportImagesJson() {
+  const data = {};
+  usedImageEntries().forEach(function (entry) { data[entry.name] = entry.b64; });
+  return Object.keys(data).length ? JSON.stringify(data) : '';
 }
+
+// What the shells (server_shell.js, web/web_shell.js) may use.
+window.EngiPadEditor = {
+  applyResultPage: applyResultPage,
+  exportImagesJson: exportImagesJson,
+  saveAutosave: saveAutosave,
+  updateHiddenFields: updateHiddenFields,
+};
 
 loadIcons();
 initDropdowns();
+initToolbarOverflow();
 initAutosave();
 initSheets();
 initPictures();
 initHistory();
+initNewCalculation();
 initLiveUpdate();
-initExitButton();
