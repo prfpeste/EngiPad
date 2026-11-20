@@ -77,6 +77,7 @@ from parsing.lexer import (
     LPAREN,
     MINUS,
     NUMBER,
+    PERCENT,
     PLUS,
     RBRACKET,
     RPAREN,
@@ -163,6 +164,23 @@ class Parser:
 
         if self._peek().type == APOSTROPHE:
             self._advance()
+
+            if self._peek().type == IDENT and self._peek().value == PERCENT:
+                # "40'%" is the plain number 0.4 and never part of a
+                # compound unit. A name right after "*" or "/" would be
+                # read as a unit elsewhere ("3'm/s"); here it could only
+                # be a variable, which silently changes the meaning of
+                # e.g. "0.4'%/K". Refused with a hint; a number after it
+                # ("40'%*3") is a plain new factor.
+                self._advance()
+                if self._peek().type == CARET:
+                    raise ValueError("% cannot be raised to a power.")
+                if self._peek().type in (STAR, SLASH) and self._unit_continues_after_op():
+                    raise ValueError(
+                        "% cannot be combined with other units. For a "
+                        "factor, write it in front: a*40'%."
+                    )
+                return Quantity(node, Identifier(PERCENT))
 
             if self._peek().type == IDENT and self._peek().value == "degC":
                 # degC is not a pure scale-factor unit (affine

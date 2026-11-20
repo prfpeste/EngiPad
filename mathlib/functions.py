@@ -172,7 +172,27 @@ def _nsolve(*args):
     return _solve_one(plain_equations[0], unknown_list[0], magnitudes[0]) * units[0]
 
 
+def _secant_start(start):
+    """Two start points close together for the one-dimensional solver.
+
+    With one start value mpmath's secant method takes x0 + 0.25 as its
+    second point -- a FIXED step in SI base units. For an unknown that is
+    small in SI (5 cm = 0.05 m, 1 mV, 1 uF) that step lands far away, often
+    where the function is flat, and the solver does not converge. A second
+    point 0.1 % next to x0 keeps the step in the scale of the start value.
+    At x0 = 0 there is no scale to go by, so the default stays.
+    """
+    try:
+        value = float(start)
+    except (TypeError, ValueError):
+        return start
+    if value == 0:
+        return start
+    return (start, start * (1 + sp.Float("1e-3")))
+
+
 def _solve_one(equation, unknown, start):
+    start = _secant_start(start)
     try:
         return sp.nsolve(equation, unknown, start, modules=_nsolve_modules())
     except ValueError as exc:
@@ -655,14 +675,26 @@ DIMENSIONLESS_ARGUMENT_FUNCTIONS = frozenset({
 # Names that are handled by the bridge itself (mathlib/sympy_bridge.py)
 # or by core/engine.py and therefore are not in the tables above, but
 # are just as reserved as the built-in functions.
-RESERVED_FUNCTION_NAMES = frozenset({"if", "plot", "picture", "prop", "haprop"})
+RESERVED_FUNCTION_NAMES = frozenset({"if", "plot", "picture", "prop", "haprop", "assume"})
 
 # Functions whose arguments may carry a unit but must all have the same
 # dimension (a ratio of them is formed internally).
 DIMENSION_MATCHING_FUNCTIONS = frozenset({"atan2"})
 
+# Rewriting a symbolic result, only where the user writes it
+# ("g_s = simplify(g)"). Deliberately NOT in COMMON_EVAL_FUNCTIONS: the
+# formula display ("display" mode) must never rewrite the input, it
+# keeps "simplify(...)" as written. No code generation (no lambdify)
+# inside these three.
+_REWRITE_FUNCTIONS = {
+    "simplify": sp.simplify,
+    "expand": sp.expand,
+    "factor": sp.factor,
+}
+
 NUMERIC_FUNCTIONS = {
     **COMMON_EVAL_FUNCTIONS,
+    **_REWRITE_FUNCTIONS,
     "integrate": sp.integrate,
     "diff": sp.diff,
     "sum": sp.summation,
@@ -691,6 +723,7 @@ DISPLAY_FUNCTIONS = {
 
 PLOT_FUNCTIONS = {
     **COMMON_EVAL_FUNCTIONS,
+    **_REWRITE_FUNCTIONS,
     "integrate": sp.Integral,
     "diff": sp.Derivative,
     "sum": sp.Sum,

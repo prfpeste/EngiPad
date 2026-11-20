@@ -8,6 +8,7 @@ from mathlib.functions import NUMERIC_FUNCTIONS, RESERVED_FUNCTION_NAMES
 from mathlib.sympy_bridge import (
     UserFunction,
     _unit_node_to_sympy,
+    assumptions_scope,
     ast_to_sympy,
     sheet_lookup_scope,
     user_functions_scope,
@@ -22,10 +23,11 @@ from mathlib.units import (
     normalize_identifiers,
     normalize_numeric_quantity,
     split_magnitude_unit,
+    substitute_symbols,
 )
-from parsing.ast_nodes import BinaryOp, Comparison, FunctionCall, Identifier, Quantity
+from parsing.ast_nodes import BinaryOp, Comparison, FunctionCall, Identifier, Number, Quantity
 from parsing.parser import parse
-from rendering.latex_input import _render_unit
+from rendering.latex_input import _render_unit, to_latex
 
 
 def _unit_names_in(node) -> set:
@@ -46,7 +48,21 @@ def build_desired_unit(text: str):
     dimension are derived from the individual unit definitions in
     UNIT_NS, and the LaTeX comes from the renderer of the input echo, so
     nothing has to be listed per combination.
+
+    A reciprocal unit is written with a 1 in the numerator: "1/s",
+    "1/min", "1/K", "1/(m*K)". The unit grammar has no numbers, so the
+    part after "1/" is read as a unit and then inverted.
     """
+    reciprocal = _RECIPROCAL_UNIT_RE.match(text)
+    if reciprocal:
+        try:
+            latex, base, scale = build_desired_unit(reciprocal.group(1))
+        except ValueError as exc:
+            if "°C" in str(exc):
+                raise
+            raise ValueError(f"Unknown desired unit '{text}'") from None
+        return rf"\frac{{1}}{{{latex}}}", 1 / base, 1 / scale
+
     try:
         node = parse(f"1'{text}")
     except Exception:
@@ -96,6 +112,9 @@ def find_assignment(text: str) -> int:
 
 
 _IDENT = r"[^\W\d]\w*"
+# "| 1/s", "| 1/(m*K)": the part after "1/" must not start with another
+# "1/" (no "1/1/s").
+_RECIPROCAL_UNIT_RE = re.compile(r"^\s*1\s*/\s*(?!1\s*/)(\S.*?)\s*$")
 _FUNCTION_SIGNATURE_RE = re.compile(rf"^({_IDENT})\s*\(([^()]*)\)$")
 _IDENT_RE = re.compile(rf"^{_IDENT}$")
 
@@ -157,6 +176,24 @@ def split_top_level(text: str, delimiter: str) -> list[str]:
     return parts
 
 
+def _with_symbols_replaced(value, mapping):
+    """`value` with the symbols in `mapping` replaced -- for a stored
+    value of any kind (expression, matrix, list, ...). Units are left
+    alone (substitute_symbols); functions and other non-SymPy entries of
+    the namespace come back unchanged."""
+    if isinstance(value, sp.MatrixBase):
+        return value.applyfunc(lambda element: _with_symbols_replaced(element, mapping))
+    if isinstance(value, (list, tuple)):
+        return type(value)(_with_symbols_replaced(item, mapping) for item in value)
+    if isinstance(value, dict):
+        return {key: _with_symbols_replaced(item, mapping) for key, item in value.items()}
+    if isinstance(value, sp.Basic):
+        if not (value.free_symbols & set(mapping)):
+            return value
+        return substitute_symbols(value, mapping)
+    return value
+
+
 @dataclass
 class EvaluationContext:
     var_ns: dict = field(default_factory=lambda: dict(NUMERIC_FUNCTIONS))
@@ -174,15 +211,26 @@ class EvaluationContext:
     #                    comparison of two known quantities at top level
     last_definition: bool = False
     last_comparison: object = None
+    #   last_assumption: LaTeX of an "assume(T > 0)" line, else None
+    last_assumption: object = None
+    # "assume(T > 0)" in this sheet: name -> SymPy assumptions.
+    assumptions: dict = field(default_factory=dict)
 
     @contextlib.contextmanager
     def _scope(self):
-        with sheet_lookup_scope(self.sheet_lookup), user_functions_scope(self.user_functions):
+        with sheet_lookup_scope(self.sheet_lookup), \
+                user_functions_scope(self.user_functions), \
+                assumptions_scope(self.assumptions):
             yield
+
+    def variable_symbol(self, name: str):
+        """Symbol for a variable without a value, with its assumptions."""
+        return sp.Symbol(name, **self.assumptions.get(name, {}))
 
     def eval_line(self, line: str):
         self.last_definition = False
         self.last_comparison = None
+        self.last_assumption = None
         with self._scope():
             return self._eval_line(line)
 
@@ -367,6 +415,11 @@ class EvaluationContext:
         line_core, desired_unit = self.parse_assignment(line)
 
         ast = parse(line_core)
+        if isinstance(ast, FunctionCall) and ast.name == "assume":
+            if desired_unit is not None:
+                raise ValueError("assume(...) cannot have a target unit.")
+            self._assume(ast)
+            return None, None, None, None, None, None
         expr_num = self._evaluate(ast)
         if expr_num in (sp.true, sp.false):
             value = expr_num
@@ -382,6 +435,57 @@ class EvaluationContext:
             desired_unit = self._typed_unit_of_bare_literal(line_core)
 
         return None, line_core, expr_disp, expr_num, value, desired_unit
+
+    def _assume(self, ast):
+        """assume(T > 0) or assume(T > 0, ω_d > 0): the variables are
+        positive from this line on. Only "> 0" (decided 20.11.2026): it
+        is what integrals, sqrt and solve need.
+
+        For SymPy a positive T is a different symbol than a plain T.
+        Values stored in earlier lines that still contain the plain T
+        are switched to the positive one, otherwise "f - T^2" with
+        f = T^2 from before would not be 0.
+        """
+        if not ast.args:
+            raise ValueError("assume(T > 0) expected: at least one condition.")
+        names = []
+        for condition in ast.args:
+            if not (
+                isinstance(condition, Comparison)
+                and condition.op == ">"
+                and isinstance(condition.left, Identifier)
+                and isinstance(condition.right, Number)
+                and float(condition.right.value) == 0
+            ):
+                raise ValueError(
+                    "assume() only accepts conditions of the form name > 0, "
+                    "e.g. assume(T > 0)."
+                )
+            name = condition.left.name
+            if name in self.user_vars:
+                raise ValueError(
+                    f"{name} already has a value; assume() is only for "
+                    "variables without a value."
+                )
+            if name in self.user_functions:
+                raise ValueError(f"{name} is a function, not a variable.")
+            names.append(name)
+
+        mapping = {}
+        for name in names:
+            plain = self.variable_symbol(name)
+            self.assumptions[name] = {"positive": True}
+            assumed = self.variable_symbol(name)
+            if plain != assumed:
+                mapping[plain] = assumed
+        if mapping:
+            for store in (self.var_ns, self.sym_exprs):
+                for key, value in list(store.items()):
+                    store[key] = _with_symbols_replaced(value, mapping)
+
+        self.last_assumption = r"\text{assume: }\ " + r",\ ".join(
+            to_latex(condition, self.known_names()) for condition in ast.args
+        )
 
     def parse_plot_call(self, stripped: str):
         inner = stripped[5:-1]
@@ -416,7 +520,7 @@ class EvaluationContext:
         namespace = self.var_ns
         if var_name is not None:
             namespace = dict(self.var_ns)
-            namespace[var_name] = sp.Symbol(var_name)
+            namespace[var_name] = self.variable_symbol(var_name)
 
         with self._scope():
             return ast_to_sympy(ast, namespace, self.user_vars, mode="numeric")

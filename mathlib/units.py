@@ -159,6 +159,9 @@ _UNIT_FAMILIES = (
 # DESIRED_UNIT_MAP) AND the input echo
 # (rendering/latex_input.py::_render_unit), so both always agree.
 UNIT_DISPLAY_OVERRIDES = {
+    # "40'%" (input only, see parsing/lexer.py). A bare "%" would start
+    # a LaTeX comment (MathJax and pdflatex).
+    "%": r"\%",
     "Ohm": r"\mathrm{\Omega}",
     "to": r"\mathrm{t}",
     "deg": r"^\circ",

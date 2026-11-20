@@ -17,7 +17,7 @@ from __future__ import annotations
 import multiprocessing as mp
 from multiprocessing.connection import wait
 
-DEFAULT_TIMEOUT_SECONDS = 10
+from core.request_options import DEFAULT_TIMEOUT_SECONDS  # noqa: F401 (also used by callers)
 
 
 def _worker(conn, func, args: tuple, kwargs: dict) -> None:

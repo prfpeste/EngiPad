@@ -43,6 +43,9 @@ DCOLON = "DCOLON"  # "::" -- sheet reference, e.g. S1::L
 COMPARE = "COMPARE"  # value: "<", ">", "<=", ">=", "==" or "!="
 EOF = "EOF"
 
+# Name of the percent unit ("40'%"), an IDENT token after the "'".
+PERCENT = "%"
+
 _SINGLE_CHAR_TOKENS = {
     "+": PLUS,
     "-": MINUS,
@@ -57,6 +60,8 @@ _SINGLE_CHAR_TOKENS = {
     "'": APOSTROPHE,
 }
 
+
+_CARET_LOOKALIKES = frozenset({"\u02c6", "\uff3e"})
 
 _TWO_CHAR_COMPARISONS = frozenset({"<=", ">=", "==", "!="})
 _ONE_CHAR_COMPARISONS = {
@@ -76,11 +81,11 @@ class Token:
 
 
 def _is_ident_start(ch: str) -> bool:
-    return ch.isalpha() or ch == "_"
+    return (ch.isalpha() or ch == "_") and ch not in _CARET_LOOKALIKES
 
 
 def _is_ident_continue(ch: str) -> bool:
-    return ch.isalnum() or ch == "_"
+    return (ch.isalnum() or ch == "_") and ch not in _CARET_LOOKALIKES
 
 
 def tokenize(text: str) -> list[Token]:
@@ -98,6 +103,15 @@ def tokenize(text: str) -> list[Token]:
         ch = text[i]
 
         if ch.isspace():
+            i += 1
+            continue
+
+        # "^" typed with a dead key or another keyboard layout can come
+        # out as a look-alike: "ˆ" (U+02C6, which Python even counts as
+        # a letter, so "2ˆ2" became the name "ˆ2") or the full-width
+        # "＾" (U+FF3E). Both mean the power operator.
+        if ch in _CARET_LOOKALIKES:
+            tokens.append(Token(CARET, "^", i))
             i += 1
             continue
 
@@ -154,6 +168,14 @@ def tokenize(text: str) -> list[Token]:
 
         if ch in _SINGLE_CHAR_TOKENS:
             tokens.append(Token(_SINGLE_CHAR_TOKENS[ch], ch, i))
+            i += 1
+            continue
+
+        # Percent as an input unit, "40'%": only right after the unit
+        # marker. Anywhere else "%" stays an unexpected character (no
+        # modulo operator, no variable named "%").
+        if ch == "%" and tokens and tokens[-1].type == APOSTROPHE:
+            tokens.append(Token(IDENT, PERCENT, i))
             i += 1
             continue
 

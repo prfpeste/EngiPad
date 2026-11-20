@@ -57,7 +57,13 @@ def create_plot(expr_sym, var_symbol, x_min=-10, x_max=10, num_points=400, note=
 
     f_num = sp.lambdify(var_symbol, expr_sym, [_SPECIAL_FUNCTIONS, "numpy"])
     xs = np.linspace(float(x_min), float(x_max), num_points)
-    ys = f_num(xs)
+    # A formula without the plot variable ("plot(1, x, 0, 1)", a constant
+    # force, sin(x)^2 + cos(x)^2 after simplify) gives ONE value instead
+    # of one per point; matplotlib then refused to draw ("x and y must
+    # have same first dimension"). A constant is a horizontal line.
+    ys = np.asarray(f_num(xs))
+    if ys.shape != xs.shape:
+        ys = np.broadcast_to(ys, xs.shape)
 
     fig, ax = plt.subplots(figsize=(4, 3), dpi=100)
     ax.plot(xs, ys)

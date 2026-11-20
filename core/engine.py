@@ -11,19 +11,25 @@ from core.formatter import (
     render_plain_text_item,
 )
 from core.images import parse_picture_call
-from mathlib.plotting import create_plot
 from parsing.ast_nodes import Identifier
 from parsing.parser import parse
 from mathlib.units import UNIT_VALUES, normalize_identifiers, strip_units_for_plot
 
 
+def _create_plot(*args, **kwargs):
+    """mathlib.plotting.create_plot(), imported on the first plot only:
+    it loads matplotlib and NumPy, which most sheets never need (faster
+    start of the desktop version; the web version cannot have them in
+    its start-up memory snapshot)."""
+    from mathlib.plotting import create_plot
+
+    return create_plot(*args, **kwargs)
+
+
 sp.init_printing()
 
-DEFAULT_INPUT = (
-    '"Example:"\n'
-    "a = 5'm/s^2 ; m = 10'kg\n"
-    "F = m * a\n"
-)
+# The first page starts with an empty sheet (no example; since 18.11.2026).
+DEFAULT_INPUT = ""
 
 
 # A line that looks like the start of a new statement ("name = ...",
@@ -187,7 +193,7 @@ def evaluate_lines(user_input: str, rel_tol: float, ctx: EvaluationContext, imag
                             "plot(f, x, ...): the second argument must be a variable name."
                         )
                     func_expr = ctx.resolve_plot_expression(args[0], var_name)
-                    var_symbol = sp.Symbol(var_name)
+                    var_symbol = ctx.variable_symbol(var_name)
                     x_min = ctx.eval_plot_bound(args[2]) if len(args) >= 3 else -10
                     x_max = ctx.eval_plot_bound(args[3]) if len(args) >= 4 else 10
 
@@ -206,7 +212,7 @@ def evaluate_lines(user_input: str, rel_tol: float, ctx: EvaluationContext, imag
 
                     block_items.append({
                         "type": "plot",
-                        "src": create_plot(
+                        "src": _create_plot(
                             func_expr, var_symbol, x_min, x_max,
                             note="values in SI base units" if had_units else None,
                         ),
@@ -231,6 +237,11 @@ def evaluate_lines(user_input: str, rel_tol: float, ctx: EvaluationContext, imag
                     result_only, line_for_eval = _split_result_only(stripped)
 
                 var, raw_expr, expr_sym, expr_num, val, desired_unit = ctx.eval_line(line_for_eval)
+
+                if ctx.last_assumption:
+                    # "assume(T > 0)": shown as "assume: T > 0".
+                    block_items.append({"type": "latex", "content": ctx.last_assumption})
+                    continue
 
                 if ctx.last_definition:
                     # "f(x) = ...": a definition shows its formula only.

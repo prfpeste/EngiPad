@@ -38,9 +38,13 @@ from __future__ import annotations
 
 import contextlib
 import contextvars
+import dataclasses
+import functools
 from dataclasses import dataclass
 
 import sympy as sp
+from sympy.functions.elementary.hyperbolic import HyperbolicFunction, InverseHyperbolicFunction
+from sympy.functions.elementary.trigonometric import InverseTrigonometricFunction, TrigonometricFunction
 from sympy.logic.boolalg import Boolean
 
 from mathlib.functions import (
@@ -53,11 +57,14 @@ from mathlib.functions import (
 )
 from mathlib.units import (
     UNIT_NS,
+    UNIT_VALUES,
     check_addition_dimensions,
     compare_values,
     require_dimensionless,
     require_same_dimension,
+    substitute_symbols,
 )
+from parsing.lexer import PERCENT
 from parsing.ast_nodes import (
     BinaryOp,
     Comparison,
@@ -79,6 +86,7 @@ _FUNCTION_TABLES = {
 }
 
 _DEGC_OFFSET = sp.Float("273.15")
+_PERCENT = sp.Rational(1, 100)
 
 # Resolver for sheet references ("S1::L"): a callable (sheet, name) ->
 # value, provided by the workbook evaluation (core/workbook.py) via
@@ -126,6 +134,32 @@ def user_functions_scope(functions):
         _USER_FUNCTIONS.reset(token)
 
 
+# Assumptions about variables without a value ("assume(T > 0)"):
+# name -> SymPy assumptions, provided by core/context.py via
+# assumptions_scope(). For SymPy a positive T is a DIFFERENT symbol than
+# a plain T, so every variable symbol is made by variable_symbol().
+_ASSUMPTIONS = contextvars.ContextVar("engipad_assumptions", default=None)
+
+
+@contextlib.contextmanager
+def assumptions_scope(assumptions):
+    token = _ASSUMPTIONS.set(assumptions)
+    try:
+        yield
+    finally:
+        _ASSUMPTIONS.reset(token)
+
+
+def assumptions_of(name: str) -> dict:
+    return (_ASSUMPTIONS.get() or {}).get(name, {})
+
+
+def variable_symbol(name: str) -> sp.Symbol:
+    """The symbol for a variable without a value, with the assumptions
+    made for it in this sheet (none: a plain symbol as always)."""
+    return sp.Symbol(name, **assumptions_of(name))
+
+
 def _call_user_function(function: UserFunction, args: tuple, var_ns: dict, user_vars: set, mode: str):
     if len(args) != len(function.params):
         raise ValueError(
@@ -154,11 +188,114 @@ def _call_user_function(function: UserFunction, args: tuple, var_ns: dict, user_
     local_ns = dict(var_ns)
     local_ns.update(zip(function.params, args))
 
+    # A parameter that is the VARIABLE of diff/integrate/lim/sum/prod in
+    # the body ("τ(r) = -η*diff(u(r), r)") must stay a symbol until that
+    # operation is done: differentiating with respect to "0.01 m" is
+    # meaningless. Such parameters first get a fresh placeholder symbol;
+    # the argument is put in afterwards (derive first, then insert).
+    # Every other function takes the direct way as before.
+    placeholders = {
+        name: sp.Dummy(name, **assumptions_of(name))
+        for name in function.params
+        if name in _calculus_variables(function.body)
+    }
+    local_ns.update(placeholders)
+
     token = _CALL_DEPTH.set(depth + 1)
     try:
-        return ast_to_sympy(function.body, local_ns, user_vars, "numeric")
+        result = ast_to_sympy(function.body, local_ns, user_vars, "numeric")
     finally:
         _CALL_DEPTH.reset(token)
+
+    if not placeholders:
+        return result
+
+    values = dict(zip(function.params, args))
+    result = substitute_symbols(
+        result, {symbol: values[name] for name, symbol in placeholders.items()}
+    )
+    # While the placeholders were symbols, the unit checks of the body
+    # stayed silent (as for any variable without a value). Catch up now
+    # that the real arguments are in.
+    _check_dimensions_after_insert(result)
+    return result
+
+
+# Functions whose argument (after the first) names the variable of the
+# operation: diff(f, x), integrate(f, x) / integrate(f, (x, a, b)),
+# sum/prod(f, (i, a, b)), lim(f, x, x0).
+_CALCULUS_FUNCTIONS = frozenset({
+    "diff", "integrate", "sum", "summe", "prod", "produkt", "lim",
+})
+
+
+def _exact_exponent_for_units(base, exponent):
+    """A decimal exponent on a quantity with a unit, "(16'm^4)^0.25",
+    made exact (1/4). With the Float SymPy builds the unit meter**1.0,
+    which is a different unit than meter: "| mm", additions and
+    comparisons with it failed ("dimension [length**1.0] vs [length]").
+    The typed decimal is taken as it is written (0.25 -> 1/4, 0.1 ->
+    1/10); the value does not change. Bases without a unit keep the
+    Float, so "2^0.5" and "z^0.5" stay exactly as before."""
+    if not isinstance(exponent, sp.Float) or isinstance(base, sp.MatrixBase):
+        return exponent
+    if not (hasattr(base, "has") and base.has(*UNIT_VALUES)):
+        return exponent
+    return sp.Rational(str(exponent))
+
+
+@functools.lru_cache(maxsize=256)
+def _calculus_variables(node) -> frozenset:
+    """Names used as the variable of diff/integrate/sum/prod/lim
+    anywhere in the AST `node` (a function body)."""
+    found = set()
+
+    def visit(item):
+        if isinstance(item, tuple):
+            for element in item:
+                visit(element)
+            return
+        if not dataclasses.is_dataclass(item):
+            return
+        if isinstance(item, FunctionCall) and item.name in _CALCULUS_FUNCTIONS:
+            positions = item.args[1:2] if item.name == "lim" else item.args[1:]
+            for arg in positions:
+                if isinstance(arg, Identifier):
+                    found.add(arg.name)
+                elif isinstance(arg, ListLiteral) and arg.items and isinstance(arg.items[0], Identifier):
+                    found.add(arg.items[0].name)
+        for field_ in dataclasses.fields(item):
+            visit(getattr(item, field_.name))
+
+    visit(node)
+    return frozenset(found)
+
+
+_DIMENSIONLESS_ARGUMENT_CLASSES = (
+    sp.exp, sp.log, sp.erf, sp.erfc,
+    TrigonometricFunction, InverseTrigonometricFunction,
+    HyperbolicFunction, InverseHyperbolicFunction,
+)
+
+
+def _check_dimensions_after_insert(expr):
+    """The unit checks of the bridge (addition, exponent, argument of
+    exp/sin/...) for an expression that was built with placeholder
+    symbols and only now has its real arguments. Like the original
+    checks, silent for anything that still contains a free variable."""
+    if not isinstance(expr, sp.Basic) or isinstance(expr, sp.MatrixBase):
+        return
+    for node in sp.preorder_traversal(expr):
+        if isinstance(node, sp.Add):
+            terms = node.args
+            for i, left in enumerate(terms):
+                for right in terms[i + 1:]:
+                    check_addition_dimensions(left, right)
+        elif isinstance(node, sp.Pow):
+            require_dimensionless(node.exp, "Exponent")
+        elif isinstance(node, _DIMENSIONLESS_ARGUMENT_CLASSES):
+            for arg in node.args:
+                require_dimensionless(arg, f"Argument of {type(node).__name__}()")
 
 
 _DISPLAY_RELATIONS = {
@@ -271,10 +408,13 @@ def ast_to_sympy(node: Node, var_ns: dict, user_vars: set, mode: str = "numeric"
         elif name in user_vars:
             return sp.Symbol(name)
 
+        if assumptions_of(name):
+            return variable_symbol(name)
+
         if name in table and not callable(table[name]):
             return table[name]
 
-        return sp.Symbol(name)
+        return variable_symbol(name)
 
     if isinstance(node, SheetRef):
         if mode == "display":
@@ -318,6 +458,7 @@ def ast_to_sympy(node: Node, var_ns: dict, user_vars: set, mode: str = "numeric"
             # unit symbols (b/d with kg and g) comes back as a number.
             if mode == "numeric":
                 right = require_dimensionless(right, "Exponent")
+                right = _exact_exponent_for_units(left, right)
             return left ** right
 
         raise ValueError(f"Unknown operator {node.op!r}")
@@ -333,6 +474,9 @@ def ast_to_sympy(node: Node, var_ns: dict, user_vars: set, mode: str = "numeric"
     if isinstance(node, FunctionCall):
         if node.name == "if":
             return _eval_if(node, var_ns, user_vars, mode)
+        if node.name == "assume":
+            # A statement of its own line (core/context.py), never a value.
+            raise ValueError("assume(...) must stand on a line of its own.")
         if node.name in _PROPERTY_FUNCTIONS:
             return _eval_property(node, var_ns, user_vars, mode)
 
@@ -401,6 +545,11 @@ def ast_to_sympy(node: Node, var_ns: dict, user_vars: set, mode: str = "numeric"
                 )
             return (magnitude + _DEGC_OFFSET) * UNIT_NS["K"]
 
+        if isinstance(node.unit, Identifier) and node.unit.name == PERCENT:
+            # "40'%" is the plain number 0.4. Deliberately NOT in UNIT_NS:
+            # a bare 1/100 among the unit values would make every 0.01
+            # look like "contains a unit" (expr.has(*UNIT_VALUES)).
+            return magnitude * _PERCENT
         return magnitude * _unit_node_to_sympy(node.unit)
 
     raise ValueError(f"Unknown AST node: {node!r}")
