@@ -29,9 +29,9 @@ Everything runs in the browser (Python compiled to WebAssembly with [Pyodide](ht
 
 ## Download
 
-[Download for Windows (.exe)](https://github.com/prfpeste/EngiPad/releases/download/v1.1.6/EngiPad-1.1.6-windows-x86_64.exe)
+[Download for Windows (.exe)](https://github.com/prfpeste/EngiPad/releases/download/v1.1.6/EngiPad-1.1.6.1-windows-x86_64.exe)
 
-[Download for Linux (.AppImage)](https://github.com/prfpeste/EngiPad/releases/download/v1.1.6/EngiPad-1.1.6-linux-x86_64.AppImage)
+[Download for Linux (.AppImage)](https://github.com/prfpeste/EngiPad/releases/download/v1.1.6/EngiPad-1.1.6.1-linux-x86_64.AppImage)
 
 ## Screenshots
 
