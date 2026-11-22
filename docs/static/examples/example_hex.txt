@@ -1,9 +1,7 @@
 "Heat Exchanger"
 m__dot_1=1'kg/s ; m__dot_2=2'kg/s ; ϑ_1E=25'degC  ; ϑ_2E=110'degC  ; ϑ_2A=90'degC
-k=2500'W/(m^2*K)
+k=2500'W/(m^2*K) ; c_{p,1} = 4180'kJ/(kg*K) ; c_{p,2} = 4215'kJ/(kg*K) 
 picture("sketchHex", width=300, align=left)
-c_{p,1} = prop(c_p, T, 45'degC, p, 1'bar, Water) | kJ/(kg*K) 
-c_{p,2} = prop(c_p, T, 100'degC, p, 2'bar, Water) | kJ/(kg*K) 
 Q__dot=m__dot_2*c_{p,2}*(ϑ_2E-ϑ_2A) |kW
 ϑ_1A=solve(Eq(Q__dot,m__dot_1*c_{p,1}*(ϑ_1A-ϑ_1E)),ϑ_1A) |degC
 
