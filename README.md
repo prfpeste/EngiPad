@@ -18,7 +18,7 @@ The interface consists of a text editor on the left and a LaTeX/plot output area
 
 ## Try the web version
 
-No installation: **[open EngiPad in your browser](https://prfpeste.github.io/EngiPad/?example=static/examples/example_hex.txt)**
+No installation: **[open EngiPad in your browser](https://prfpeste.github.io/EngiPad/?example=example_hex.txt)**
 
 Everything runs in the browser (Python compiled to WebAssembly with [Pyodide](https://pyodide.org)); nothing is sent to a server.
 
