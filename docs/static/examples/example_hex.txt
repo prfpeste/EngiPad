@@ -6,7 +6,7 @@ Q__dot=m__dot_2*c_{p,2}*(ϑ_2E-ϑ_2A) |kW
 ϑ_1A=solve(Eq(Q__dot,m__dot_1*c_{p,1}*(ϑ_1A-ϑ_1E)),ϑ_1A) |degC
 
 Δϑ_1=ϑ_2E-ϑ_1E ;"          "; Δϑ_2=ϑ_2A-ϑ_1A
-'-> '; Δϑ_max=Δϑ_1 ;' und '; Δϑ_min=Δϑ_2
+'-> '; Δϑ_max=Δϑ_1 ;' and '; Δϑ_min=Δϑ_2
 Δϑ_m=(Δϑ_max-Δϑ_min)/ln(Δϑ_max/Δϑ_min)
 'Hex area:  ';  A=Q__dot/(k*Δϑ_m)
 
