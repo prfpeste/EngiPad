@@ -1,6 +1,6 @@
 {
- "engipad": "1.1.6.1",
- "built": "2026-11-20 11:18",
+ "engipad": "1.1.6",
+ "built": "2026-11-22 10:47",
  "pyodide": "314.0.8",
  "python": "3.14.2",
  "pylib_path": "/lib/engipad/pylib.zip",
@@ -64,10 +64,10 @@
  },
  "sizes": {
   "pyodide": 13533516,
-  "pylib": 13271530,
-  "snapshot": 17069643,
+  "pylib": 13271436,
+  "snapshot": 17085444,
   "snapshot_in_memory": 65405056,
   "wheels": 17183451,
-  "static": 2281797
+  "static": 2345624
  }
 }
