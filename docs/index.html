@@ -127,6 +127,7 @@
             <div class="dropdown-panel" data-panel>
               <p class="panel-title">Functions</p>
               <div class="chip-grid">
+                <button type="button" onclick="insertSnippet('^()', 1);" title="Power: type the base, then this button, then the exponent">xʸ</button>
                 <button type="button" onclick="insertSnippet('sqrt()', 1);">√x</button>
                 <button type="button" onclick="insertSnippet('abs()', 1);">|x|</button>
                 <button type="button" onclick="insertSnippet('exp()', 1);">exp(x)</button>
@@ -148,8 +149,8 @@
                 <button type="button" onclick="insertSnippet('erf()', 1);">erf</button>
                 <button type="button" onclick="insertSnippet('erfc()', 1);">erfc</button>
                 <button type="button" onclick="insertSnippet('besselj(0, )', 1);">J₀</button>
-                <button type="button" onclick="insertSnippet('prop( , T, , p, , Water)', 20);">prop</button>
-                <button type="button" onclick="insertSnippet('haprop( , T, , p, , φ, )', 20);">haprop</button>
+                <button type="button" onclick="insertSnippet('prop( , T, , p, , Water)', 19);">prop</button>
+                <button type="button" onclick="insertSnippet('haprop( , T, , p, , φ, )', 17);">haprop</button>
                 <button type="button" onclick="insertSnippet('min( , )', 4);">min</button>
                 <button type="button" onclick="insertSnippet('max( , )', 4);">max</button>
                 <button type="button" onclick="insertSnippet('round()', 1);">round</button>
@@ -166,16 +167,20 @@
             <div class="dropdown-panel" data-panel>
               <p class="panel-title">Equations &amp; calculus</p>
               <div class="chip-grid">
-                <button type="button" onclick="insertSnippet('diff( , x)', 6);">diff</button>
+                <button type="button" onclick="insertSnippet('diff( , x)', 5);">diff</button>
                 <button type="button" onclick="insertSnippet('integrate( , (x, , ))', 11);">∫ integrate</button>
                 <button type="button" onclick="insertSnippet('nintegrate( , (x, , ))', 11);">∫ numeric</button>
                 <button type="button" onclick="insertSnippet('Eq( , )', 4);">Eq(…)</button>
                 <button type="button" onclick="insertSnippet('solve(Eq( , ),  )', 11);">solve</button>
                 <button type="button" onclick="insertSnippet('csolve(Eq( , ),  )', 11);">csolve</button>
                 <button type="button" onclick="insertSnippet('nsolve(( ),( ),( ))', 11);">nsolve</button>
-                <button type="button" onclick="insertSnippet('sum(i,(i,0,n))', 5);">sum</button>
-                <button type="button" onclick="insertSnippet('prod(i,(i,0,n))', 6);">prod</button>
-                <button type="button" onclick="insertSnippet('lim(x,x,0)', 5);">lim</button>
+                <button type="button" onclick="insertSnippet('sum(i,(i,0,n))', 10);">sum</button>
+                <button type="button" onclick="insertSnippet('prod(i,(i,0,n))', 10);">prod</button>
+                <button type="button" onclick="insertSnippet('lim(x,x,0)', 6);">lim</button>
+                <button type="button" onclick="insertSnippet('simplify()', 1);">simplify</button>
+                <button type="button" onclick="insertSnippet('expand()', 1);">expand</button>
+                <button type="button" onclick="insertSnippet('factor()', 1);">factor</button>
+                <button type="button" onclick="insertSnippet('assume( > 0)', 5);">assume</button>
               </div>
             </div>
           </div>
@@ -193,12 +198,12 @@
                 <button type="button" onclick="insertSnippet('T()', 1);">T</button>
                 <button type="button" onclick="insertSnippet('trace()', 1);">trace</button>
                 <button type="button" onclick="insertSnippet('rank()', 1);">rank</button>
-                <button type="button" onclick="insertSnippet('dot(, )', 4);">dot</button>
-                <button type="button" onclick="insertSnippet('cross(, )', 6);">cross</button>
+                <button type="button" onclick="insertSnippet('dot(, )', 3);">dot</button>
+                <button type="button" onclick="insertSnippet('cross(, )', 3);">cross</button>
                 <button type="button" onclick="insertSnippet('norm()', 1);">norm</button>
                 <button type="button" onclick="insertSnippet('eye()', 1);">eye</button>
-                <button type="button" onclick="insertSnippet('zeros(, )', 4);">zeros</button>
-                <button type="button" onclick="insertSnippet('solve_linear(, )', 14);">solve_linear</button>
+                <button type="button" onclick="insertSnippet('zeros(, )', 3);">zeros</button>
+                <button type="button" onclick="insertSnippet('solve_linear(, )', 3);">solve_linear</button>
                 <button type="button" onclick="insertSnippet('eigenvals()', 1);">eigenvals</button>
                 <button type="button" onclick="insertSnippet('eigenvects()', 1);">eigenvects</button>
                 <button type="button" onclick="insertSnippet('interp( , , )', 6);">interp</button>
@@ -212,7 +217,7 @@
             <div class="dropdown-panel" data-panel>
               <p class="panel-title">Plot</p>
               <div class="chip-grid">
-                <button type="button" onclick="insertSnippet('plot( , x, -5, 5)', 6);">2D plot</button>
+                <button type="button" onclick="insertSnippet('plot( , x, -5, 5)', 12);">2D plot</button>
               </div>
             </div>
           </div>
@@ -329,7 +334,7 @@
             <div class="dropdown-panel" data-panel>
               <p class="panel-title">EngiPad</p>
               <dl class="info-list">
-                <dt>Version</dt><dd>1.1.6</dd>
+                <dt>Version</dt><dd>1.1.6.1</dd>
                 <dt>Author</dt><dd>Prof. Dr. Peter Stein</dd>
                 <dt>Built with</dt><dd>Python (Pyodide), SymPy</dd>
                 <dt>Coding</dt><dd>Claude Sonnet 5</dd>
