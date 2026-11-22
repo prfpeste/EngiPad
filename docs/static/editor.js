@@ -202,6 +202,44 @@ function newCalculation() {
   codeTextarea.focus();
 }
 
+// Loads the example of ?example=name into an empty editor; the user's own
+// work of this task (from the backup) comes first. The web version then
+// calculates it (event "engipad:example-loaded", static/web/web_shell.js).
+function editorIsEmpty() {
+  syncActiveSheet();
+  return sheets.length === 1 && sheets[0].code.trim() === '';
+}
+
+function showOutputNote(text) {
+  const out = document.querySelector('.output-container');
+  if (!out) return;
+  const note = document.createElement('p');
+  note.className = 'output-note';
+  note.textContent = text;
+  out.innerHTML = '';
+  out.appendChild(note);
+}
+
+function loadExample() {
+  if (!EXAMPLE_NAME || !editorIsEmpty()) return;
+  fetch('static/examples/' + EXAMPLE_NAME + '.txt', { cache: 'no-cache' })
+    .then(function (res) {
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      return res.text();
+    })
+    .then(function (text) {
+      if (!editorIsEmpty()) return;          // the user has started typing meanwhile
+      imageStore.clear();
+      loadWorkbookText(text);
+      resetHistory();                        // like a file opened with Open
+      if (scheduleAutosave) scheduleAutosave();
+      document.dispatchEvent(new CustomEvent('engipad:example-loaded'));
+    })
+    .catch(function () {
+      showOutputNote("Example '" + EXAMPLE_NAME + "' not found.");
+    });
+}
+
 function initNewCalculation() {
   const btn = document.getElementById('new-calc-btn');
   if (btn) btn.addEventListener('click', newCalculation);
@@ -315,6 +353,18 @@ const AUTOSAVE_DEBOUNCE_MS = 1000;
 const TASK_INDEX_KEY = 'engipad_autosave_tasks';
 const TASK_LIMIT = 20;
 
+// --- Examples: ?example=name ---
+//
+// Opens static/examples/<name>.txt (a normal EngiPad file, as saved with
+// Save) when the page starts with an empty sheet, i.e. when there is no
+// own work of this task yet (see loadExample). Only names of letters,
+// digits, "_" and "-", only from that folder. New examples need no build:
+// put the .txt file into static/examples/ of the published folder.
+const EXAMPLE_NAME = (function () {
+  const name = new URLSearchParams(window.location.search).get('example');
+  return name && /^[A-Za-z0-9_-]{1,64}$/.test(name) ? name : null;
+})();
+
 function detectTask() {
   const param = new URLSearchParams(window.location.search).get('task');
   if (param) return 'task:' + param.slice(0, 100);
@@ -326,6 +376,8 @@ function detectTask() {
   } catch (e) {
     // embedded by a page of another server: no access, no task
   }
+  // An example opened directly keeps its own backup, too.
+  if (EXAMPLE_NAME) return 'example:' + EXAMPLE_NAME;
   return null;
 }
 
@@ -1382,4 +1434,5 @@ initSheets();
 initPictures();
 initHistory();
 initNewCalculation();
+loadExample();
 initLiveUpdate();

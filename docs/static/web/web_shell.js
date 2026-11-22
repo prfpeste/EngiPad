@@ -195,8 +195,8 @@
   }
 
   // A calculation brought back by the editor's backup (e.g. after "Check"
-  // in a Moodle question reloaded the page) is calculated once, so its
-  // result is visible again without pressing Calculate.
+  // in a Moodle question reloaded the page) or an example (?example=name)
+  // is calculated once, so its result is visible without pressing Calculate.
   function calculateRestored() {
     const form = document.getElementById('calc-form');
     const code = document.getElementById('code-textarea');
@@ -277,6 +277,11 @@
   document.addEventListener('DOMContentLoaded', function () {
     initSubmit();
     initExport();
+  });
+  // An example opened with ?example=name (static/editor.js) is calculated
+  // once; if Python is not ready yet, that happens when it is.
+  document.addEventListener('engipad:example-loaded', function () {
+    if (ready) calculateRestored();
   });
   startWorker();
 })();

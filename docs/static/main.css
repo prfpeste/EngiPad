@@ -673,3 +673,9 @@ textarea:focus {
 @media print {
   .web-status { display: none !important; }
 }
+
+/* Note in the output area, e.g. "Example 'x' not found." (editor.js) */
+.output-note {
+  color: var(--text-secondary);
+  font-style: italic;
+}
